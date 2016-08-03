@@ -4,10 +4,10 @@ from keras.models import Sequential
 from keras.layers import Dense, Activation
 from keras import backend as K
 from keras.optimizers import Adagrad
+import theano.tensor as T
 import numpy as np
 from numpy.random import shuffle
 from collections import defaultdict
-from sansa.ml.kbc.keras import HolE
 from sansa.ml.kbc.keras.param import Parameter, AdaGrad
 import timeit
 import pickle
@@ -126,7 +126,8 @@ class KerasTrainer(object):
         E = K.variable(self.model.E, name="entity_embeddings")
         R = K.variable(self.model.R, name="relation_embeddings")
         model = Sequential()
-        model.add(HolographicLayer(E, R, self.model.rparam))
+        model.add(HolographicLayerTest(E, R, self.model.rparam))
+        # model.add(Dense(5, input_dim=(10,)))
         model.add(Activation('sigmoid'))
         adagrad = Adagrad(lr=0.01, epsilon=1e-08)
         model.compile(optimizer=adagrad, loss='binary_crossentropy')
@@ -172,17 +173,26 @@ class KerasTrainer(object):
         # take step for batch
         model = self.getModel()
         assert isinstance(model, keras.models.Model)
-        xs, ys = list(zip(*xys))
-        self.loss += model.train_on_batch(xs, ys)
+        xs, ys = [np.array(i) for i in list(zip(*xys))]
+        # print(xs.shape, ys.shape)
+
+        # func = K.function([model.layers[0].input], [model.layers[0].output])
+        # print(xs[44])
+        # a = func([[xs[44]]])[0]
+        # print(a.shape, a)
+        loss = model.train_on_batch(xs, ys)
+        # print(loss)
+        self.loss += loss
 
 class HolographicLayer(Layer):
-    def __init__(self, E, R, rparam, **kwargs):
+    def __init__(self, E, R, rparam, input_shape=(3,), **kwargs):
         self.E = E
         self.R = R
         self.rparam = rparam
+        kwargs["input_shape"] = input_shape
         super(HolographicLayer, self).__init__(**kwargs)
 
-    def ccorr1d_sc(input, filters, image_shape=None, filter_shape=None,
+    def ccorr1d_sc(self, input, filters, image_shape=None, filter_shape=None,
               border_mode='valid', subsample=(1,), filter_flip=True):
         """
         using conv2d with a single input channel
@@ -207,26 +217,94 @@ class HolographicLayer(Layer):
         # We need to flip the channels dimension because it will be convolved over.
         filters_sc = filters.dimshuffle('x', 'x', 0, 'x')[:, :, ::-1, :]
 
-        conved = K.conv2d(input_sc, filters_sc, image_shape=image_shape_sc,
-                               filter_shape=filter_shape_sc, border_mode=border_mode).flatten()
+        conved = T.nnet.conv2d(input_sc, filters_sc, image_shape_sc,
+                           filter_shape_sc, subsample=(1, subsample[0]),
+                           filter_flip=filter_flip, border_mode=border_mode).flatten()
+        return conved  # drop the unused dimension
+
+    def build(self, input_shape):
+        self.trainable_weights = [self.E, self.R]
+        # from keras.regularizers import l2
+        # regularizer = l2(self.rparam)
+        # regularizer.set_param(K.concatenate([self.E, self.R], axis=0))
+        # self.regularizers.append(regularizer)
+
+    def call(self, x, mask=None):
+        batch_placeholder = K.cast(x, 'int32')[0]
+        s, o, p = [batch_placeholder[i] for i in range(3)]
+
+        s2v = K.gather(self.E, s)
+        o2v = K.gather(self.E, o)
+        r2v = K.gather(self.R, p)
+
+        # print(K.shape(s2v).eval())
+        # print(self.E[[0]].shape.eval())
+
+        def ccorr(a, b):
+            return self.ccorr1d_sc(a, b, border_mode='half')
+
+        eta = K.dot(K.transpose(r2v), ccorr(s2v, o2v))
+        return eta
+
+    def get_output_shape_for(self, input_shape):
+        return (input_shape[0], 1)
+
+class HolographicLayerTest(Layer):
+    def __init__(self, E, R, rparam, input_shape=(3,), **kwargs):
+        self.E = E
+        self.R = R
+        self.rparam = rparam
+        kwargs["input_shape"] = input_shape
+        super(HolographicLayerTest, self).__init__(**kwargs)
+
+    def ccorr1d_sc(self, input, filters, image_shape=None, filter_shape=None,
+              border_mode='valid', subsample=(1,), filter_flip=True):
+        """
+        using conv2d with a single input channel
+        """
+    #     if border_mode not in ('valid', 0, (0,)):
+    #         raise RuntimeError("Unsupported border_mode for conv1d_sc: "
+    #                            "%s" % border_mode)
+
+        if image_shape is None:
+            image_shape_sc = None
+        else:
+            # (b, c, i0) to (b, 1, c, i0)
+            image_shape_sc = (image_shape[0], 1, image_shape[1], image_shape[2])
+
+        if filter_shape is None:
+            filter_shape_sc = None
+        else:
+            filter_shape_sc = (filter_shape[0], 1, filter_shape[1],
+                               filter_shape[2])
+
+        input_sc = input.dimshuffle('x', 'x', 0, 'x')
+        # We need to flip the channels dimension because it will be convolved over.
+        filters_sc = filters.dimshuffle('x', 'x', 0, 'x')[:, :, ::-1, :]
+
+        conved = T.nnet.conv2d(input_sc, filters_sc, image_shape_sc,
+                           filter_shape_sc, subsample=(1, subsample[0]),
+                           filter_flip=filter_flip, border_mode=border_mode).flatten()
         return conved  # drop the unused dimension
 
     def build(self, input_shape):
         self.trainable_weights = [self.E, self.R]
         from keras.regularizers import l2
-        self.regularizers.append(l2(self.rparam))
+        regularizer = l2(self.rparam)
+        regularizer.set_param(K.concatenate([self.E, self.R], axis=0))
+        self.regularizers.append(regularizer)
 
     def call(self, x, mask=None):
-        batch_placeholder = K.cast(x, 'int32')
-        s, p, o = [batch_placeholder[i] for i in range(3)]
-        s2v = K.transpose(K.squeeze(K.gather(self.E, s), [1]))
-        o2v = K.transpose(K.squeeze(K.gather(self.E, o), [1]))
-        r2v = K.transpose(K.squeeze(K.gather(self.R, p), [1]))
+        batch_placeholder = K.cast(x, 'int32')[0]
+        s, o, p = [batch_placeholder[i] for i in range(3)]
 
-        def ccorr(s, o):
-            return self.ccorr1d_sc(s, o, border_mode='same')
+        s2v = K.gather(self.E, s)
+        o2v = K.gather(self.E, o)
+        r2v = K.gather(self.R, p)
 
-        eta = K.dot(r2v, ccorr(s2v, o2v))
+        def ccorr(a, b):
+            return self.ccorr1d_sc(a, b, border_mode='half')
+        eta = K.dot(r2v, ccorr(s2v, o2v)[:-1])
         return eta
 
     def get_output_shape_for(self, input_shape):

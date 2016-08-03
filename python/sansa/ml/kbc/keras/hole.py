@@ -1,8 +1,8 @@
 import numpy as np
-from skge.base import Model
-from skge.util import grad_sum_matrix, unzip_triples, ccorr, cconv
-from skge.param import normless1
-import skge.actfun as af
+from sansa.ml.kbc.keras.base import Model
+from sansa.ml.kbc.keras.util import grad_sum_matrix, unzip_triples, ccorr, cconv
+from sansa.ml.kbc.keras.param import normless1
+from sansa.ml.kbc.keras import actfun as af
 
 
 class HolE(Model):
