@@ -118,9 +118,9 @@ class KerasTrainer(object):
 
 
     def getModel(self):
-        # Training stuff
-        batch_placeholder = K.placeholder(shape=(3,), name="batch")
-        label_placeholder = K.placeholder(shape=(1,), name="label")
+        # # Training stuff
+        # batch_placeholder = K.placeholder(shape=(3,), name="batch")
+        # label_placeholder = K.placeholder(shape=(1,), name="label")
 
         # Model stuff
         E = K.variable(self.model.E, name="entity_embeddings")
@@ -130,9 +130,12 @@ class KerasTrainer(object):
         # model.add(Dense(5, input_dim=(10,)))
         model.add(Activation('sigmoid'))
         adagrad = Adagrad(lr=0.01, epsilon=1e-08)
-        model.compile(optimizer=adagrad, loss='binary_crossentropy')
-        return model
 
+        def loss(y_true, y_pred):
+            return -K.mean(K.log(K.sigmoid(y_true * y_pred)))
+
+        model.compile(optimizer=adagrad, loss=loss)
+        return model
 
     def _pre_epoch(self):
         self.loss = 0
@@ -142,6 +145,8 @@ class KerasTrainer(object):
         self.batch_size = np.ceil(len(xys) / self.nbatches)
 
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
+
+        model = self.getModel()
 
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
@@ -155,14 +160,18 @@ class KerasTrainer(object):
             for batch in np.split(idx, batch_idx):
                 # select indices for current batch
                 bxys = [xys[z] for z in batch]
-                self._process_batch(bxys)
+                self._process_batch(bxys, model)
 
             # check callback function, if false return
             for f in self.post_epoch:
                 if not f(self):
                     break
 
-    def _process_batch(self, xys):
+        #
+        # print (self.model.E.shape)
+        # print (self.model.R.shape)
+
+    def _process_batch(self, xys, model):
         # if enabled, sample additional examples
         if self.samplef is not None:
             xys += self.samplef(xys)
@@ -171,9 +180,9 @@ class KerasTrainer(object):
             self.model._prepare_batch_step(xys)
 
         # take step for batch
-        model = self.getModel()
         assert isinstance(model, keras.models.Model)
         xs, ys = [np.array(i) for i in list(zip(*xys))]
+        # print(xs, ys)
         # print(xs.shape, ys.shape)
 
         # func = K.function([model.layers[0].input], [model.layers[0].output])
@@ -181,7 +190,13 @@ class KerasTrainer(object):
         # a = func([[xs[44]]])[0]
         # print(a.shape, a)
         loss = model.train_on_batch(xs, ys)
+        E, R = model.layers[0].get_weights()
+        print (np.linalg.norm(self.model.E-E, 'fro'))
+        print (np.linalg.norm(self.model.R-R, 'fro'))
+        self.model.E, self.model.R = E, R
+
         # print(loss)
+
         self.loss += loss
 
 class HolographicLayer(Layer):
