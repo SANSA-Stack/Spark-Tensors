@@ -14,7 +14,7 @@ class HolE(Model):
         self.add_hyperparam('rparam', kwargs.pop('rparam', 0.0))
         self.add_hyperparam('af', kwargs.pop('af', af.Sigmoid))
         self.add_param('E', (self.sz[0], self.ncomp), post=normless1)
-        self.add_param('R', (self.sz[2], self.ncomp))
+        self.add_param('R', (self.sz[2], self.ncomp*self.ncomp))
 
     def _scores(self, ss, ps, os):
         return np.sum(self.R[ps] * ccorr(self.E[ss], self.E[os]), axis=1)

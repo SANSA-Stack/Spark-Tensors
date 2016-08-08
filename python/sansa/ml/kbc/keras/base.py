@@ -3,11 +3,12 @@ from keras.engine.topology import Layer
 from keras.models import Sequential
 from keras.layers import Dense, Activation
 from keras import backend as K
-from keras.optimizers import Adagrad
+from keras.optimizers import Adagrad, SGD
+import math
 import theano.tensor as T
 import numpy as np
 from numpy.random import shuffle
-from collections import defaultdict
+from collections import defaultdict, Counter
 from sansa.ml.kbc.keras.param import Parameter, AdaGrad
 import timeit
 import pickle
@@ -123,17 +124,20 @@ class KerasTrainer(object):
         # label_placeholder = K.placeholder(shape=(1,), name="label")
 
         # Model stuff
-        E = K.variable(self.model.E, name="entity_embeddings")
-        R = K.variable(self.model.R, name="relation_embeddings")
+        # E = K.variable(self.model.E, name="entity_embeddings")
+        # R = K.variable(self.model.R, name="relation_embeddings")
         model = Sequential()
-        model.add(HolographicLayerTest(E, R, self.model.rparam))
+        model.add(HolographicLayerTest(self.model.E.shape[0], self.model.R.shape[0], self.model.E.shape[1], self.model.rparam))
         # model.add(Dense(5, input_dim=(10,)))
-        model.add(Activation('sigmoid'))
-        adagrad = Adagrad(lr=0.01, epsilon=1e-08)
+        # model.add(Activation('sigmoid'))
+        # adagrad = Adagrad(lr=0.001, epsilon=1e-07)
+        adagrad = SGD(lr=0.001, decay=1e-06, nesterov=True, momentum=0.5)
 
         def loss(y_true, y_pred):
-            return -K.mean(K.log(K.sigmoid(y_true * y_pred)))
+            print(y_pred)
+            return -K.sum(K.log(K.sigmoid(-y_true * y_pred)))
 
+        print("Compiling new model")
         model.compile(optimizer=adagrad, loss=loss)
         return model
 
@@ -142,9 +146,9 @@ class KerasTrainer(object):
 
     def _optim(self, xys):
         idx = np.arange(len(xys))
-        self.batch_size = np.ceil(len(xys) / self.nbatches)
+        # self.batch_size = np.ceil(len(xys) / self.nbatches)
 
-        batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
+        # batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
 
         model = self.getModel()
 
@@ -157,10 +161,12 @@ class KerasTrainer(object):
             self.epoch_start = timeit.default_timer()
 
             # process mini-batches
-            for batch in np.split(idx, batch_idx):
-                # select indices for current batch
-                bxys = [xys[z] for z in batch]
-                self._process_batch(bxys, model)
+            # for batch in np.split(idx, batch_idx):
+            #     # select indices for current batch
+            #     bxys = [xys[z] for z in batch]
+            #     self._process_batch(bxys, model)
+
+            self._process_batch(xys, model)
 
             # check callback function, if false return
             for f in self.post_epoch:
@@ -179,25 +185,38 @@ class KerasTrainer(object):
         if hasattr(self.model, '_prepare_batch_step'):
             self.model._prepare_batch_step(xys)
 
+        shuffle(xys)
         # take step for batch
         assert isinstance(model, keras.models.Model)
         xs, ys = [np.array(i) for i in list(zip(*xys))]
         # print(xs, ys)
         # print(xs.shape, ys.shape)
 
-        # func = K.function([model.layers[0].input], [model.layers[0].output])
-        # print(xs[44])
-        # a = func([[xs[44]]])[0]
-        # print(a.shape, a)
-        loss = model.train_on_batch(xs, ys)
+        class LossHistory(keras.callbacks.Callback):
+            def on_train_begin(self, logs={}):
+                self.loss = -1
+
+            def on_batch_end(self, batch, logs={}):
+                self.loss = logs.get('loss')
+
+        history = LossHistory()
+        # print(Counter(ys))
+        # x = K.placeholder(shape=(1,3))
+        # func = K.function([x], model(x))
+        # for i, j in zip(xs, ys):
+        #     print(func([[i]]), j)
+        model.fit(xs, ys, batch_size=len(xs)/100, nb_epoch=100, callbacks=[history])
+        loss = history.loss
+        # loss = model.train_on_batch(xs, ys)
         E, R = model.layers[0].get_weights()
-        print (np.linalg.norm(self.model.E-E, 'fro'))
-        print (np.linalg.norm(self.model.R-R, 'fro'))
+        # print (np.linalg.norm(self.model.E-E, 'fro'))
+        # print (np.linalg.norm(self.model.R-R, 'fro'))
         self.model.E, self.model.R = E, R
 
         # print(loss)
 
         self.loss += loss
+        # print (acc)
 
 class HolographicLayer(Layer):
     def __init__(self, E, R, rparam, input_shape=(3,), **kwargs):
@@ -265,9 +284,11 @@ class HolographicLayer(Layer):
         return (input_shape[0], 1)
 
 class HolographicLayerTest(Layer):
-    def __init__(self, E, R, rparam, input_shape=(3,), **kwargs):
-        self.E = E
-        self.R = R
+    def __init__(self, E, R, d, rparam, input_shape=(3,), **kwargs):
+        bnd = math.sqrt(6) / math.sqrt(2*E)
+        from numpy.random import uniform
+        self.init = [K.variable(uniform(size=(E,d), low=-bnd, high=bnd), name="E"),
+                     K.variable(uniform(size=(R,d*d), low=-bnd, high=bnd), name="R")]
         self.rparam = rparam
         kwargs["input_shape"] = input_shape
         super(HolographicLayerTest, self).__init__(**kwargs)
@@ -303,11 +324,16 @@ class HolographicLayerTest(Layer):
         return conved  # drop the unused dimension
 
     def build(self, input_shape):
+        self.E, self.R = self.init
         self.trainable_weights = [self.E, self.R]
-        from keras.regularizers import l2
-        regularizer = l2(self.rparam)
-        regularizer.set_param(K.concatenate([self.E, self.R], axis=0))
-        self.regularizers.append(regularizer)
+        # from keras.regularizers import l2
+        # regularizer = l2(self.rparam)
+        # regularizer.set_param(self.E)
+        # self.regularizers.append(regularizer)
+        #
+        # regularizer = l2(self.rparam)
+        # regularizer.set_param(self.R)
+        # self.regularizers.append(regularizer)
 
     def call(self, x, mask=None):
         batch_placeholder = K.cast(x, 'int32')[0]
@@ -318,12 +344,84 @@ class HolographicLayerTest(Layer):
         r2v = K.gather(self.R, p)
 
         def ccorr(a, b):
-            return self.ccorr1d_sc(a, b, border_mode='half')
-        eta = K.dot(r2v, ccorr(s2v, o2v)[:-1])
+            return T.outer(a,b).flatten()
+            # return self.ccorr1d_sc(a, b, border_mode='half')
+        eta = K.dot(r2v, ccorr(s2v, o2v))
+
+        # func = K.function([s2v,o2v,r2v], K.gradients(K.sigmoid(eta), [s2v,o2v,r2v]))
+        # print(func([np.random.random(150),np.random.random(150),np.random.random(150)]))
+
         return eta
 
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], 1)
+
+class TheanoGradTest(object):
+    def ccorr1d_sc(self, input, filters, image_shape=None, filter_shape=None,
+              border_mode='valid', subsample=(1,), filter_flip=True):
+        """
+        using conv2d with a single input channel
+        """
+    #     if border_mode not in ('valid', 0, (0,)):
+    #         raise RuntimeError("Unsupported border_mode for conv1d_sc: "
+    #                            "%s" % border_mode)
+
+        if image_shape is None:
+            image_shape_sc = None
+        else:
+            # (b, c, i0) to (b, 1, c, i0)
+            image_shape_sc = (image_shape[0], 1, image_shape[1], image_shape[2])
+
+        if filter_shape is None:
+            filter_shape_sc = None
+        else:
+            filter_shape_sc = (filter_shape[0], 1, filter_shape[1],
+                               filter_shape[2])
+
+        input_sc = input.dimshuffle('x', 'x', 0, 'x')
+        # We need to flip the channels dimension because it will be convolved over.
+        filters_sc = filters.dimshuffle('x', 'x', 0, 'x')[:, :, ::-1, :]
+
+        conved = T.nnet.conv2d(input_sc, filters_sc, image_shape_sc,
+                           filter_shape_sc, subsample=(1, subsample[0]),
+                           filter_flip=filter_flip, border_mode=border_mode).flatten()
+        return conved  # drop the unused dimension
+
+
+    def call(self):
+        E = K.variable(np.random.random((1000,100)), name="entity_embeddings")
+        R = K.variable(np.random.random((10,10000)), name="relation_embeddings")
+        x = K.placeholder(shape=(1,3), name="spo")
+        y = K.placeholder(ndim=0, name="y")
+        batch_placeholder = K.cast(x, 'int32')[0]
+        # print(batch_placeholder.eval())
+        s, o, p = [batch_placeholder[i] for i in range(3)]
+
+        s2v = K.gather(E, s)
+        o2v = K.gather(E, o)
+        r2v = K.gather(R, p)
+
+        def ccorr(a, b):
+            return T.outer(a,b).flatten()
+            # return T.arctan(s2v) + T.arctan(o2v)
+            # return (s2v.dimshuffle('x', 'x', 0, 'x') + o2v.dimshuffle('x', 'x', 0, 'x')).flatten()
+            # return T.nnet.conv2d(a.dimshuffle('x', 'x', 0, 'x'), b.dimshuffle('x', 'x', 0, 'x'), None,
+            #                None,
+            #                filter_flip=True, border_mode='half')
+            # return self.ccorr1d_sc(a, b, border_mode='half')
+        eta = K.dot(r2v, ccorr(s2v, o2v))
+        # py = 1/(1+K.exp(-eta))
+        # l = -K.log(py)
+        # from theano import pp, function, printing
+        # grad = T.grad(eta, E)
+        # print(pp(grad))
+        # func = function([x], grad)
+        func = K.function([x, y], K.gradients(eta, [s2v, o2v, r2v, E, R]))
+
+        # for i in func.maker.fgraph.outputs:
+            # print(pp(i))
+        # print (T.grad(py, s2v))
+        print (func([[[1,2,3]], -1]))
 
 class StochasticTrainer(object):
     """
@@ -480,3 +578,7 @@ def sigmoid(fs):
         else:
             fs[i] = 1.0 / (1 + np.exp(-fs[i]))
     return fs[:, np.newaxis]
+
+if __name__ =="__main__":
+    TheanoGradTest().call()
+
