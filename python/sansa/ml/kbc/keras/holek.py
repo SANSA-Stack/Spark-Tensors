@@ -78,7 +78,13 @@ class HolographicLayer(Layer):
         r2v = K.gather(self.R, p)
 
         def ccorr(a, b):
+            # Return tensor product - basically bilinear/RESCAL models
             return T.outer(a,b).flatten()
+
+            # Or cross-correlation op?
+            # return T.nnet.conv2d(a.dimshuffle('x', 'x', 0, 'x'), b.dimshuffle('x', 'x', 0, 'x'), None,
+            #                None,
+            #                filter_flip=True, border_mode='half').flatten()[:-1]
             # return self.ccorr1d_sc(a, b, border_mode='half')
         eta = K.dot(r2v, ccorr(s2v, o2v))
 
