@@ -128,8 +128,9 @@ class KgeModel:
             # relation_output2 = Reshape((100,100))(relation_output)
             sp_output = merge([subject_output, relation_output], mode='sum')
             # so_output = merge([subject_output, object_output], mode=lambda x: np.outer(x[0], x[1]).reshape(100000,))
-            spo_output = merge([sp_output, Reshape((0,100))(object_output)], mode=lambda a, b: K.batch_dot(a, b, axes=len(a._keras_shape) - 1),
-                               output_shape=lambda x: x[0])
+            # spo_output = merge([sp_output, Reshape((0,100))(object_output)], mode=lambda a, b: K.batch_dot(a, b, axes=len(a._keras_shape) - 1),
+            #                    output_shape=lambda x: x[0])
+            spo_output = merge([sp_output, object_output], mode='sum',  output_shape=lambda x: x[:-1])
 
             self._kge_model = Model(input=[self.subject, self.relation, self.get_object()], output=[spo_output])
         return self._kge_model
@@ -332,7 +333,7 @@ class Evaluator:
             # bad_answers = np.roll(good_answers, random.randint(10, len(questions) - 10))
             # bad_answers = good_answers.copy()
             # random.shuffle(bad_answers)
-            bad_objects = np.asarray([[int(random.choice(self.entity.keys()))] for _ in xrange(len(good_objects))])
+            bad_objects = np.asarray([[int(random.choice(list(self.entity.keys())))] for _ in range(len(good_objects))])
 
             # shuffle questionsj
             # zipped = zip(questions, good_answers)
@@ -459,7 +460,7 @@ if __name__ == '__main__':
 
         'training_params': {
             'save_every': 100,
-            # 'eval_every': 1,
+            'eval_every': 1,
             'batch_size': 128,
             'nb_epoch': 1000,
             'validation_split': 0,
