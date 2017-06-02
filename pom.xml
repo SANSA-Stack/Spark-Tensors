@@ -15,7 +15,7 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <encoding>UTF-8</encoding>
-
+        <spark.version>2.0.1</spark.version>
         <scala.version>2.11.7</scala.version>
         <scala.compat.version>2.11</scala.compat.version>
         <scala.classifier>${scala.compat.version}</scala.classifier>
@@ -69,43 +69,11 @@
         </repository>
     </repositories>
 
-    <profiles>
-        <profile>
-            <id>osx-x86_64-cpu</id>
-            <activation>
-                <os>
-                    <family>mac</family>
-                    <arch>x86_64</arch>
-                </os>
-            </activation>
-            <properties>
-                <platform>osx-x86_64-cpu</platform>
-            </properties>
-        </profile>
-        <profile>
-            <id>linux-x86_64-cpu</id>
-            <activation>
-                <os>
-                    <family>linux</family>
-                </os>
-            </activation>
-            <properties>
-                <platform>linux-x86_64-cpu</platform>
-            </properties>
-        </profile>
-        <profile>
-            <id>linux-x86_64-gpu</id>
-            <properties>
-                <platform>linux-x86_64-gpu</platform>
-            </properties>
-        </profile>
-    </profiles>
-
     <dependencies>
         <dependency>
             <groupId>ml.dmlc.mxnet</groupId>
-            <artifactId>mxnet-full_${scala.compat.version}-${platform}</artifactId>
-            <version>0.9.3a</version>
+            <artifactId>mxnet-spark_${scala.compat.version}</artifactId>
+            <version>0.9.5-SNAPSHOT</version>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -114,19 +82,35 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>ml.dmlc.mxnet</groupId>
+            <artifactId>mxnet-full_${scala.compat.version}-${platform}</artifactId>
+            <version>0.9.5-SNAPSHOT</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>net.sansa-stack</groupId>
+            <artifactId>sansa-rdf-spark-core</artifactId>
+            <version>0.1.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-graphx_${scala.compat.version}</artifactId>
-            <version>1.5.1</version>
+            <version>${spark.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.compat.version}</artifactId>
-            <version>1.5.1</version>
+            <version>${spark.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-mllib_${scala.compat.version}</artifactId>
-            <version>1.5.1</version>
+            <version>${spark.version}</version>
         </dependency>
     </dependencies>
 
@@ -299,26 +283,6 @@
         </pluginManagement>
     </build>
 
-
-    <distributionManagement>
-        <!--
-                <repository>
-                    <id>ossrh</id>
-                    <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-                </repository>
-        -->
-        <repository>
-            <id>maven.aksw.internal</id>
-            <name>AKSW Release Repository</name>
-            <url>http://maven.aksw.org/archiva/repository/internal</url>
-        </repository>
-        <snapshotRepository>
-            <id>maven.aksw.snapshots</id>
-            <name>AKSW Snapshot Repository</name>
-            <url>http://maven.aksw.org/archiva/repository/snapshots</url>
-        </snapshotRepository>
-    </distributionManagement>
-
     <profiles>
         <profile>
             <id>doclint-java8-disable</id>
@@ -350,7 +314,35 @@
                 </plugins>
             </build>
         </profile>
-
+        <profile>
+            <id>osx-x86_64-cpu</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <properties>
+                <platform>osx-x86_64-cpu</platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>linux-x86_64-cpu</id>
+            <activation>
+                <os>
+                    <family>linux</family>
+                </os>
+            </activation>
+            <properties>
+                <platform>linux-x86_64-cpu</platform>
+            </properties>
+        </profile>
+        <profile>
+            <id>linux-x86_64-gpu</id>
+            <properties>
+                <platform>linux-x86_64-gpu</platform>
+            </properties>
+        </profile>
         <profile>
             <id>release</id>
             <build>
