@@ -1,4 +1,4 @@
-package net.sansa_stack.ml.kge.loss
+package net.sansa_stack.ml.kge
 
 import ml.dmlc.mxnet._
 import ml.dmlc.mxnet.{Symbol => s}
@@ -12,7 +12,7 @@ object MaxMarginLoss {
   }
 
   def loss(margin: Float)(positiveScore: Symbol, negativeScore: Symbol): Symbol = {
-    val max = s.max(negativeScore - positiveScore + margin, 0)
+    val max = s.max(positiveScore - negativeScore + margin, 0)
     s.sum(name = "sum")()(Map("data" -> max))
   }
 }
@@ -41,5 +41,13 @@ object L2Similarity {
 object DotSimilarity {
   def apply(x: Symbol, y: Symbol): Symbol = {
     s.dot("dot")()(Map("lhs" -> x, "rhs" -> y))
+  }
+}
+
+object Hits {
+  def hitsAt1(label: NDArray, predicted: NDArray): Float = {
+    val labelA = label.toArray
+    val predA = predicted.toArray
+    labelA.zip(predA).map(x => if(x._1.toInt == x._2.toInt && x._1.toInt == 1) 1 else 0).sum
   }
 }
