@@ -73,7 +73,7 @@
         <dependency>
             <groupId>ml.dmlc.mxnet</groupId>
             <artifactId>mxnet-spark_${scala.compat.version}</artifactId>
-            <version>0.9.5-SNAPSHOT</version>
+            <version>0.10.1-SNAPSHOT</version>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -84,7 +84,7 @@
         <dependency>
             <groupId>ml.dmlc.mxnet</groupId>
             <artifactId>mxnet-full_${scala.compat.version}-${platform}</artifactId>
-            <version>0.9.5-SNAPSHOT</version>
+            <version>0.10.1-SNAPSHOT</version>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
