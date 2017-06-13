@@ -12,8 +12,9 @@ object MaxMarginLoss {
   }
 
   def loss(margin: Float)(positiveScore: Symbol, negativeScore: Symbol): Symbol = {
-    val max = s.max(positiveScore - negativeScore + margin, 0)
-    s.sum(name = "sum")()(Map("data" -> max))
+    var loss = s.max(negativeScore - positiveScore + margin, 0)
+    loss = s.sum(name = "sum")()(Map("data" -> loss))
+    s.make_loss(name = "loss")()(Map("data" -> loss))
   }
 }
 
@@ -31,9 +32,9 @@ object Tanh {
 
 object L2Similarity {
   def apply(x: Symbol, y: Symbol): Symbol = {
-//    val xs = s.square("square")()(Map("data" -> x))
-//    val ys = s.square("square")()(Map("data" -> y))
-    val diff = x*x - y*y
+    val xs = s.square("square")()(Map("data" -> x))
+    val ys = s.square("square")()(Map("data" -> y))
+    val diff = xs - ys
     s.sqrt("sqrt")()(Map("data" -> diff))
   }
 }
