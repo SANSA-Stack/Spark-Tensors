@@ -5,22 +5,22 @@ import ml.dmlc.mxnet.{Symbol => s}
 import scala.io.Source
 import scala.util.Random
 import ml.dmlc.mxnet.optimizer.Adam
-import net.sansa_stack.ml.kge.Hits
+import net.sansa_stack.ml.kge.{Main, Hits}
 
 /**
   * Created by nilesh on 01/06/2017.
   */
-class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches: Int) {
+class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize: Int) {
   def getNet(): (Symbol, Seq[String]) = {
     // embedding weight vectors
     val entityWeight = s.Variable("entityWeight")
     val relationWeight = s.Variable("relationWeight")
 
     def entityEmbedding(data: Symbol) =
-      s.Embedding("entity")()(Map("data" -> data, "input_dim" -> numEntities, "output_dim" -> latentFactors))
+      s.Embedding()()(Map("data" -> data, "weight" -> entityWeight, "input_dim" -> numEntities, "output_dim" -> latentFactors))
 
     def relationEmbedding(data: Symbol) =
-      s.Embedding("relation")()(Map("data" -> data, "input_dim" -> numRelations, "output_dim" -> latentFactors))
+      s.Embedding()()(Map("data" -> data, "weight" -> relationWeight, "input_dim" -> numRelations, "output_dim" -> latentFactors))
 
     // inputs
     var head = s.Variable("subjectEntity")
@@ -37,7 +37,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches
 
     import net.sansa_stack.ml.kge.{L2Similarity, MaxMarginLoss}
     def getScore(head: Symbol, relation: Symbol, tail: Symbol) = {
-      L2Similarity(head + relation, tail)
+      L2Similarity(head + relation, tail)*(-1.0)
     }
 
     val posScore = getScore(head, relation, tail)
@@ -48,15 +48,13 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches
   }
 
   def train() = {
-    val batchSize = 1000
-
     val ctx = Context.cpu()
     //  val numEntities = 40943
     val (transeModel, paramNames) = getNet()
 
     import ml.dmlc.mxnet.Xavier
 
-    val initializer = new Xavier(rndType = "gaussian")
+    val initializer = new Xavier(factorType = "in", magnitude = 2.34f)
 
     val (argShapes, outputShapes, auxShapes) = transeModel.inferShape(
       (for (paramName <- paramNames) yield paramName -> Shape(batchSize, 1))
@@ -70,30 +68,35 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches
     }.map(x => x._1 -> NDArray.empty(x._2, ctx)).toMap
     argDict.foreach {
       case (name, ndArray) =>
+        println(name)
         if (!paramNames.contains(name)) {
+          println("notcontains:"+name)
           initializer.initWeight(name, ndArray)
         }
     }
 
-    def readData(path: String) = {
-      val triples = Source.fromFile(path).getLines().map(_.split(","))
-      (triples.map(_(0).toFloat).toArray,
-        triples.map(_(1).toFloat).toArray,
-        triples.map(_(2).toFloat).toArray,
-        triples.map(x => Random.nextInt(numEntities).toFloat).toArray,
-        triples.map(x => Random.nextInt(numEntities).toFloat).toArray)
-    }
+    def readDataBatched(stage: String) = {
+      val triplesFile = s"/home/nilesh/utils/Spark-Tensors/data/$stage.txt"
+      val entityIDFile = "/home/nilesh/utils/Spark-Tensors/data/entity2id.txt"
+      val relationIDFile = "/home/nilesh/utils/Spark-Tensors/data/relation2id.txt"
 
-    def readDataBatched(path: String) = {
-      val triples = Source.fromFile(path).getLines().map(_.split(","))
-      (triples.map(_(0).toFloat).toArray.grouped(numBatches).toSeq,
-        triples.map(_(1).toFloat).toArray.grouped(numBatches).toSeq,
-        triples.map(_(2).toFloat).toArray.grouped(numBatches).toSeq,
-        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(numBatches).toSeq,
-        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(numBatches).toSeq)
-    }
 
-    def file(stage: String) = s"/home/nilesh/utils/Spark-Tensors/data/$stage.txt"
+      def getIDMap(path: String) = Source.fromFile(path)
+        .getLines()
+        .map(_.split("\t"))
+        .map(x => x(0) -> x(1).toFloat).toMap
+
+      val entityID = getIDMap(entityIDFile)
+      val relationID = getIDMap(relationIDFile)
+
+      val triples = Source.fromFile(triplesFile).getLines().map(_.split("\t")).toSeq
+
+      (triples.map(x => entityID(x(0))).toArray.grouped(batchSize).toSeq,
+        triples.map(x => relationID(x(2))).toArray.grouped(batchSize).toSeq,
+        triples.map(x => entityID(x(1))).toArray.grouped(batchSize).toSeq,
+        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(batchSize).toSeq,
+        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(batchSize).toSeq)
+    }
 
     val executor = transeModel.bind(ctx, argDict, gradDict)
 
@@ -108,8 +111,8 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches
     val corruptHead = argDict("corruptSubjectEntity")
     val corruptTail = argDict("corruptObjectEntity")
 
-    val (trainSubjects, trainRelations, trainObjects, trainCorruptSubjects, trainCorruptObjects) = readDataBatched(file("train"))
-    val (testSubjects, testRelations, testObjects, _, _) = readDataBatched(file("test"))
+    val (trainSubjects, trainRelations, trainObjects, trainCorruptSubjects, trainCorruptObjects) = readDataBatched("train")
+    val (testSubjects, testRelations, testObjects, _, _) = readDataBatched("test")
 
     var iter = 0
     var minTestHits = 100f
@@ -131,7 +134,9 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, numBatches
           opt.update(idx, argDict(name), grad, optimState)
       }
 
-      println(s"iter $epoch, training Hits@1: ${Math.sqrt(Hits.hitsAt1(NDArray.ones(batchSize), executor.outputs(0)) / batchSize)}, min test Hits@1: $minTestHits")
+//      println(s"iter $epoch, training Hits@1: ${Math.sqrt(Hits.hitsAt1(NDArray.ones(batchSize), executor.outputs(0)) / batchSize)}, min test Hits@1: $minTestHits")
+
+      println(s"iter $epoch, training loss: ${executor.outputs(0).toArray.sum}")
       if (epoch != 0 && epoch % 50 == 0) {
         val tmp = for (i <- 0 until testSubjects.length) yield {
           head.set(testSubjects(iter))
