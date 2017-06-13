@@ -37,7 +37,10 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 
     import net.sansa_stack.ml.kge.{L2Similarity, MaxMarginLoss}
     def getScore(head: Symbol, relation: Symbol, tail: Symbol) = {
-      L2Similarity(head + relation, tail)*(-1.0)
+      var score = head + relation - tail
+      score = s.square("square")()(Map("data" -> score))
+      score = s.sum()()(Map("data" -> score, "axis" -> 0))
+      score*(-1.0)
     }
 
     val posScore = getScore(head, relation, tail)
@@ -89,7 +92,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
       val entityID = getIDMap(entityIDFile)
       val relationID = getIDMap(relationIDFile)
 
-      val triples = Source.fromFile(triplesFile).getLines().map(_.split("\t")).toSeq
+      val triples = Random.shuffle(Source.fromFile(triplesFile).getLines().map(_.split("\t")).toSeq)
 
       (triples.map(x => entityID(x(0))).toArray.grouped(batchSize).toSeq,
         triples.map(x => relationID(x(2))).toArray.grouped(batchSize).toSeq,
@@ -100,7 +103,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 
     val executor = transeModel.bind(ctx, argDict, gradDict)
 
-    val opt = new Adam(learningRate = 0.00005f, wd = 0.0001f)
+    val opt = new Adam(learningRate = 0.001f, wd = 0.0001f)
     val paramsGrads = gradDict.toList.zipWithIndex.map { case ((name, grad), idx) =>
       (idx, name, grad, opt.createState(idx, argDict(name)))
     }
