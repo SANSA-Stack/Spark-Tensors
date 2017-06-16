@@ -5,7 +5,7 @@ import ml.dmlc.mxnet.{Symbol => s}
 import scala.io.Source
 import scala.util.Random
 import ml.dmlc.mxnet.optimizer.Adam
-import net.sansa_stack.ml.kge.{Main, Hits}
+import net.sansa_stack.ml.kge.{MaxMarginLoss, L2Similarity, Main, Hits}
 
 /**
   * Created by nilesh on 01/06/2017.
@@ -35,13 +35,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     corruptHead = entityEmbedding(corruptHead)
     corruptTail = entityEmbedding(corruptTail)
 
-    import net.sansa_stack.ml.kge.{L2Similarity, MaxMarginLoss}
-    def getScore(head: Symbol, relation: Symbol, tail: Symbol) = {
-      var score = head + relation - tail
-      score = s.square("square")()(Map("data" -> score))
-      score = s.sum()()(Map("data" -> score, "axis" -> 0))
-      score*(-1.0)
-    }
+    def getScore(head: Symbol, relation: Symbol, tail: Symbol) = L2Similarity(head + relation, tail)
 
     val posScore = getScore(head, relation, tail)
     val negScore = getScore(corruptHead, relation, corruptTail)
@@ -71,9 +65,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     }.map(x => x._1 -> NDArray.empty(x._2, ctx)).toMap
     argDict.foreach {
       case (name, ndArray) =>
-        println(name)
         if (!paramNames.contains(name)) {
-          println("notcontains:"+name)
           initializer.initWeight(name, ndArray)
         }
     }
