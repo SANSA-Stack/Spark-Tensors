@@ -32,10 +32,10 @@ object Tanh {
 
 object L2Similarity {
   def apply(x: Symbol, y: Symbol): Symbol = {
-    val xs = s.square("square")()(Map("data" -> x))
-    val ys = s.square("square")()(Map("data" -> y))
-    val diff = xs - ys
-    s.sqrt("sqrt")()(Map("data" -> diff))
+    val difference = x - y
+    var score = s.square()()(Map("data" -> difference))
+    score = s.sum()()(Map("data" -> score, "axis" -> 0))
+    score*(-1.0)
   }
 }
 
