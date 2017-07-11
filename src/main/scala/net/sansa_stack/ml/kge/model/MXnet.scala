@@ -1,7 +1,7 @@
 package ml.dmlc.mxnet.spark
 
-import ml.dmlc.mxnet.optimizer.SGD
-import ml.dmlc.mxnet.spark.io.LabeledPointIter
+import ml.dmlc.mxnet.optimizer.{Adam, SGD}
+import ml.dmlc.mxnet.spark.io.{LabeledPointIter, UnLabeledPointIter}
 import ml.dmlc.mxnet._
 import ml.dmlc.mxnet.spark._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -85,7 +85,7 @@ class MXnet extends Serializable {
     this
   }
 
-  def fit(data: RDD[LabeledPoint]): MXNetModel = {
+  def fit(data: RDD[LabeledPoint]) = {
     val sc = data.context
     // distribute native jars
     params.jars.foreach(jar => sc.addFile(jar))
@@ -125,11 +125,10 @@ class MXnet extends Serializable {
     }
 
     val job = trainData.mapPartitions { partition =>
-      val dataIter = new LabeledPointIter(
+      val dataIter = new UnLabeledPointIter(
         partition, params.dimension,
         params.batchSize,
-        dataName = params.dataName,
-        labelName = params.labelName)
+        dataName = params.dataName)
 
       // TODO: more nature way to get the # of examples?
       var numExamples = 0
@@ -171,15 +170,19 @@ class MXnet extends Serializable {
 
       logger.info("Training finished, waiting for other workers ...")
       dataIter.dispose()
+      println("Anything after this? 1")
       kv.setBarrierBeforeExit(true)
+      println("Anything after this? 2")
       kv.dispose()
+      println("Anything after this? 3")
       Iterator(new MXNetModel(
         model, params.dimension, params.batchSize,
         dataName = params.dataName, labelName = params.labelName))
     }.cache()
 
     // force job to run
-    job.foreachPartition(() => _)
+    job.foreachPartition(_ => logger.info("This partition did fuck-all!"))
+    println("Anything after this? 4")
     // simply the first model
     val mxModel = job.first()
 
@@ -187,4 +190,69 @@ class MXnet extends Serializable {
     scheduler.waitFor()
     mxModel
   }
+//
+//  private def initSymbolParams(trainData: DataIter)
+//  : (IndexedSeq[String], IndexedSeq[String], IndexedSeq[String]) = {
+//    if (symGen != null) {
+//      this.symbol = symGen.generate(trainData.defaultBucketKey)
+//      checkArguments()
+//    }
+//    initParams(trainData.provideData ++ trainData.provideLabel)
+//  }
+//
+//  def checkArguments(): Unit = {
+//    // check if symbol contain duplicated names.
+//    ExecutorManager.checkArguments(symbol)
+//    // rematch parameters to delete useless ones
+//    if (allowExtraParams) {
+//      if (_argParams != null) {
+//        val argNames = symbol.listArguments().toSet
+//        _argParams = _argParams.filter { case (k, v) => argNames.contains(k) }
+//      }
+//      if (auxParams != null) {
+//        val auxNames = symbol.listAuxiliaryStates().toSet
+//        _auxParams = _auxParams.filter { case (k, v) => auxNames.contains(k) }
+//      }
+//    }
+//  }
+//
+//  private def initParams(symbol: Symbol, inputShapes: Map[String, Shape], overwrite: Boolean = false)
+//  : (IndexedSeq[String], IndexedSeq[String], IndexedSeq[String]) = {
+//    val (argShapes, _, auxShapes) = symbol.inferShape(inputShapes)
+//    val argNames = symbol.listArguments()
+//    val inputNames = inputShapes.keys.toSet
+//    val paramNames = argNames.filter(!inputNames.contains(_))
+//    val auxNames = symbol.listAuxiliaryStates()
+//
+//    val paramNameShapes = (argNames zip argShapes).filter { case (name, _) =>
+//      paramNames.contains(name)
+//    }
+//    val argParams = paramNameShapes.map { case (name, shape) =>
+//      (name, NDArray.zeros(shape))
+//    }.toMap
+//    val auxParams = (auxNames zip auxShapes).map { case (name, shape) =>
+//      (name, NDArray.zeros(shape))
+//    }.toMap
+//
+//    for ((k, v) <- argParams) {
+//      if (_argParams != null && _argParams.contains(k) && (!overwrite)) {
+//        argParams(k).set(_argParams(k))
+//      } else {
+//        initializer(k, v)
+//      }
+//    }
+//
+//    for ((k, v) <- auxParams) {
+//      if (_auxParams != null && _auxParams.contains(k) && (!overwrite)) {
+//        auxParams(k).set(_auxParams(k))
+//      } else {
+//        initializer(k, v)
+//      }
+//    }
+//
+//    _argParams = argParams
+//    _auxParams = auxParams
+//    (argNames, paramNames, auxNames)
+//  }
+
 }
