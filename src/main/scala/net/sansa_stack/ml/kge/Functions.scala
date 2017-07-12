@@ -57,58 +57,57 @@ object DotSimilarity {
 //  }
 //}
 //
-class Hits(model: FeedForward, testAxis: Int, testWith: NDArray, testData: DataIter) {
+class Hits(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray, testData: DataIter) {
   private val numItems = testWith.shape(testWith.shape.length - 1)
-  private val numTriples = testData.next().data.head.shape(0)
-  testData.reset()
+  private val groundIter = testData.flatMap(_.data).toSeq
 
-  private val groundIter = testData.flatMap(_.data)
+  private val predictIter = groundIter.map {
+      triples: NDArray =>
+        val repeatOriginal = NDArray.repeat(Map("repeats" -> numItems, "axis" -> 0))(triples).get.T
+        val repeatTest = NDArray.tile(Map("reps" -> (1, batchSize)))(testWith.reshape(Shape(1, numItems))).get
+        repeatOriginal.slice(testAxis).set(repeatTest)
+        repeatOriginal.T
+  }
 
-  private val predictIter = testData.flatMap {
-    batch: DataBatch =>
-      batch.data.map {
-        triples: NDArray =>
-          val repeatOriginal = NDArray.repeat(Map("repeats" -> numItems, "axis" -> 0))(triples).get.T
-          val repeatTest = NDArray.tile(Map("reps" -> (1, numTriples)))(testWith.reshape(Shape(1, numItems))).get
-          repeatOriginal.slice(testAxis).set(repeatTest)
-          repeatOriginal.T
+  private val groundAxis = groundIter.map(_.T.slice(testAxis).reshape(Shape(batchSize, 1)))
+
+  private val sortedPredict = predictIter.flatMap {
+    batch: NDArray =>
+      model.predict(new NDArrayIter(IndexedSeq(batch), dataBatchSize=batchSize)).map{
+        predictions: NDArray =>
+          val scores = predictions.reshape(Shape(batchSize, numItems))
+          val sorted = NDArray.argsort(Map("is_ascend" -> false))(scores).get.T
+          sorted
       }
   }
 
-  def score(topK: Int) = {
-    val sortedPredict = predictIter.flatMap {
-      batch: NDArray =>
-        println(batch.shape)
-        model.predict(new NDArrayIter(IndexedSeq(batch), dataBatchSize=1000)).map{
-          predictions: NDArray =>
-            val scores = predictions.reshape(Shape(numTriples, numItems))
-            val sorted = NDArray.argsort(Map("is_ascend" -> false))(scores).get.T
-            sorted
-        }
+  def hits(hitsAt: Int*): Seq[Float] = {
+    val hits = (groundAxis zip sortedPredict) map {
+      case (ground, predict) =>
+        val hits =
+          hitsAt.map {
+          topK: Int =>
+            val topKPredictions = predict.slice(0, topK).T
+            val hits = NDArray.broadcast_equal(ground, topKPredictions)
+            NDArray.sum(hits).toScalar / batchSize
+        }.toArray
+        NDArray.array(hits, Shape(1,hitsAt.size))
     }
 
-    println(groundIter.next().shape)
-    println(sortedPredict.next().shape)
+    val sum = hits.reduce(_ + _) / hits.size.toFloat
+    sum.toArray.toSeq
+  }
 
-    val hits = (groundIter zip sortedPredict) map {
+  def mrr: Float = {
+    val mrr = (groundAxis zip sortedPredict) map {
       case (ground, predict) =>
-        val numTriples = ground.shape(0)
-        println(numTriples)
-        val groundAxis = ground.T.slice(testAxis).reshape(Shape(numTriples, 1))
-        val hits =
-//          hitsAt.map {
-//          topK: Int =>
-          {  val topKPredictions = predict.slice(0, topK).T
-            val hits = NDArray.broadcast_equal(groundAxis, topKPredictions)
-            println(NDArray.sum(hits).toScalar)
+        val hits = NDArray.broadcast_equal(ground, predict.T)
+        println(hits.shape)
+        val ranks = NDArray.argmax(Map("axis" -> 1))(hits) + 1f
+        val mrr = NDArray.power(ranks, -1f)
+        NDArray.sum(mrr).toScalar / batchSize
+    }
 
-            NDArray.sum(hits).toScalar / numTriples
-        }
-//        NDArray.array(hits, Shape(1,hitsAt.size))
-      hits
-    } toSeq
-
-//    (hits.sum / hits.size).toArray.toSeq
-    (hits.sum / hits.size)
+    mrr.sum / mrr.size
   }
 }
