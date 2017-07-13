@@ -57,11 +57,11 @@ object DotSimilarity {
 //  }
 //}
 //
-class Hits(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray, testData: DataIter) {
+class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray, testData: DataIter) {
   private val numItems = testWith.shape(testWith.shape.length - 1)
   private val groundIter = testData.flatMap(_.data).toSeq
 
-  private val predictIter = groundIter.map {
+  private def predictIter = groundIter.iterator.map {
       triples: NDArray =>
         val repeatOriginal = NDArray.repeat(Map("repeats" -> numItems, "axis" -> 0))(triples).get.T
         val repeatTest = NDArray.tile(Map("reps" -> (1, batchSize)))(testWith.reshape(Shape(1, numItems))).get
@@ -69,9 +69,9 @@ class Hits(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray,
         repeatOriginal.T
   }
 
-  private val groundAxis = groundIter.map(_.T.slice(testAxis).reshape(Shape(batchSize, 1)))
+  private def groundAxis = groundIter.iterator  .map(_.T.slice(testAxis).reshape(Shape(batchSize, 1)))
 
-  private val sortedPredict = predictIter.flatMap {
+  private def sortedPredict = predictIter.flatMap {
     batch: NDArray =>
       model.predict(new NDArrayIter(IndexedSeq(batch), dataBatchSize=batchSize)).map{
         predictions: NDArray =>
@@ -81,20 +81,20 @@ class Hits(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray,
       }
   }
 
-  def hits(hitsAt: Int*): Seq[Float] = {
+  def hits(at: Int*): Seq[Float] = {
     val hits = (groundAxis zip sortedPredict) map {
       case (ground, predict) =>
         val hits =
-          hitsAt.map {
+          at.map {
           topK: Int =>
             val topKPredictions = predict.slice(0, topK).T
             val hits = NDArray.broadcast_equal(ground, topKPredictions)
             NDArray.sum(hits).toScalar / batchSize
         }.toArray
-        NDArray.array(hits, Shape(1,hitsAt.size))
+        NDArray.array(hits, Shape(1, at.size))
     }
 
-    val sum = hits.reduce(_ + _) / hits.size.toFloat
+    val sum = hits.reduce(_ + _) / groundIter.size
     sum.toArray.toSeq
   }
 
@@ -108,6 +108,6 @@ class Hits(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray,
         NDArray.sum(mrr).toScalar / batchSize
     }
 
-    mrr.sum / mrr.size
+    mrr.sum / groundIter.size
   }
 }
