@@ -5,9 +5,9 @@ import ml.dmlc.mxnet.{Symbol => s}
 
 import scala.io.Source
 import scala.util.Random
-import ml.dmlc.mxnet.optimizer.{Adam, SGD}
+import ml.dmlc.mxnet.optimizer.{AdaGrad, Adam, SGD}
 import ml.dmlc.mxnet.spark.io.{LabeledPointIter, UnLabeledPointIter}
-import  ml.dmlc.mxnet.spark.io.{Hits, L2Similarity, MaxMarginLoss}
+import ml.dmlc.mxnet.spark.io.{EvalMetrics, L2Similarity, MaxMarginLoss}
 import ml.dmlc.mxnet.spark.{MXNDArray, MXNet, MXNetModel, MXnet}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -61,8 +61,8 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     println(posScore)
     println(negScore)
 
-    val loss = MaxMarginLoss(1.0f)(posScore, negScore)
-    val (argShapes, outShapes, auxShapes) = loss.inferShape(Map("data" -> Shape(1000, 5)))
+    val loss = MaxMarginLoss(0.5f)(posScore, negScore)
+    val (argShapes, outShapes, auxShapes) = loss.inferShape(Map("data" -> Shape(batchSize, 5)))
 //    println(argShapes.mkString(","))
     println(outShapes.mkString(","))
     println(auxShapes.mkString(","))
@@ -98,7 +98,8 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
   }
 
   def train() = {
-    val ctx = Context.cpu()
+    val ctx = Context.gpu()
+    val ctx2 = Context.gpu()
     //  val numEntities = 40943
     val (transeModel, scoreModel, paramNames) = getNet()
 
@@ -131,7 +132,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 
     val auxNames = transeModel.listAuxiliaryStates()
     val auxParams = (auxNames zip auxShapes).map { case (name, shape) =>
-      (name, NDArray.zeros(shape))
+      (name, NDArray.zeros(shape, ctx))
     }.toMap
 
 
@@ -143,7 +144,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 //
 //    val mxnet = new MXnet()
 //      .setBatchSize(batchSize)
-//      .setContext(Context.cpu()) // or GPU if you like
+//      .setContext(Context.gpu()) // or GPU if you like
 //      .setDimension(Shape(5))
 //      .setNetwork(transeModel) // e.g. MLP model
 //      .setNumEpoch(10)
@@ -152,7 +153,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 //      .setLabelName("blah")
 //      // These jars are required by the KVStores at runtime.
 //      // They will be uploaded and distributed to each node automatically
-//      .setExecutorJars("/home/nilesh/utils/Spark-Tensors/target/sansa-kge-0.0.1-SNAPSHOT-allinone.jar")
+//      .setExecutorJars("/data/nilesh/Spark-Tensors/target/sansa-kge-0.0.1-SNAPSHOT-allinone.jar")
 //    val input = readDataBatched("train").map{
 //      case x =>
 //        LabeledPoint(0.0, Vectors.dense(x.map(_.toDouble)))
@@ -166,7 +167,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 
         val executor = transeModel.bind(ctx, argDict, gradDict)
 
-        val opt = new Adam(learningRate = 0.01f, wd = 0.0001f)
+        val opt = new AdaGrad()
         val paramsGrads = gradDict.toList.zipWithIndex.map { case ((name, grad), idx) =>
           (idx, name, grad, opt.createState(idx, argDict(name)))
         }
@@ -179,8 +180,9 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     //    val (testSubjects, testRelations, testObjects, _, _) = readDataBatched("test")
 
         var iter = 0
-        var minTestHits = 100f
-        for (epoch <- 0 until 5) {
+        var minTestHits = 300f
+        println(inputStuff.size)
+        for (epoch <- 0 until (inputStuff.size * 10)) {
           input.set(inputStuff(iter).flatten.toArray)
 //          blah.set(NDArray.zeros(batchSize, 1))
           iter += 1
@@ -203,7 +205,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     val optimizer: Optimizer = new SGD(learningRate = 0.01f,
       momentum = 0.9f, wd = 0.00001f)
     val model2 = FeedForward.newBuilder(scoreModel)
-      .setContext(Context.cpu())
+      .setContext(ctx)
       .setNumEpoch(0)
       .setBeginEpoch(0)
       .setOptimizer(optimizer)
@@ -218,27 +220,39 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
       )
       .setAuxParams(auxParams)
       .setup()
-//
 
 
-    val vectors = readDataBatched("train", test = false).flatten.map{
+
+    val vectors = Random.shuffle(readDataBatched("train", test = false).flatten.map{
       case x =>
         LabeledPoint(0.0, Vectors.dense(x.map(_.toDouble)))
-    }.take(1000).map(_.features).toIterator
-    println(vectors.next().size)
-    val dt = new PointIter(vectors, Shape(5), 1000, "data")
+    }).take(10000).map(_.features)
+    val dt = new MyPointIter(vectors.toIterator, Shape(5), batchSize, "data", "label", ctx)
 //    println(dt.next().data.head.shape)
 //    println(dt.next().data.size)
-//    val predictions = model2.predict(dt)
+//    val predictions = model2.predict(dt).map(_.copyTo(ctx2))
 //    println(model2.getArgParams.values.map(_.shape))
 //    println(model2.getAuxParams.values.map(_.shape))
 //      results.map(arr => MXNDArray(arr))
 //      val predictions = model.predict(input.map(_.features).toIterator)
 
-    val hits = new Hits(model2, 1, NDArray.array(Array.range(0,18).map(_.toFloat),
-      Shape(1,18)), dt)
-    println(hits.score(10))
+    val hits = new EvalMetrics(model2, 1, batchSize,
+      NDArray.array(Array.range(0,numRelations).map(_.toFloat), Shape(1,numRelations), ctx2),
+      new MyPointIter(vectors.toIterator, Shape(5), batchSize, "data", "label", ctx2), ctx2)
+    println(hits.hits(5,10).mkString(","))
+    println(hits.mrr)
 
+    val vectors2 = readDataBatched("test", test = false).flatten.map{
+      case x =>
+        LabeledPoint(0.0, Vectors.dense(x.map(_.toDouble)))
+    }.map(_.features)
+
+    val hits2 = new EvalMetrics(model2, 1, batchSize,
+      NDArray.array(Array.range(0,numRelations).map(_.toFloat), Shape(1,numRelations), ctx2),
+      new MyPointIter(vectors2.toIterator, Shape(5), batchSize, "data", "label", ctx2), ctx2)
+    println(hits2.hits(5,10).mkString(","))
+    println(hits2.mrr)
+//
 //    println(predictions.mkString(","))
 //
 //    println(predictions(0).toArray.mkString(","))
@@ -267,10 +281,9 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
   }
 
   def readDataBatched(stage: String, test: Boolean = false) = {
-    val triplesFile = s"/home/nilesh/utils/Spark-Tensors/data/$stage.txt"
-    val entityIDFile = "/home/nilesh/utils/Spark-Tensors/data/entity2id.txt"
-    val relationIDFile = "/home/nilesh/utils/Spark-Tensors/data/relation2id.txt"
-
+    val triplesFile = s"/data/yago/$stage.txt"
+    val entityIDFile = "/data/yago/entity2id.txt"
+    val relationIDFile = "/data/yago/relation2id.txt"
 
     def getIDMap(path: String) = Source.fromFile(path)
       .getLines()
@@ -280,17 +293,20 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     val entityID = getIDMap(entityIDFile)
     val relationID = getIDMap(relationIDFile)
 
-    val triples = Random.shuffle(Source.fromFile(triplesFile).getLines().map(_.split("\t")).toSeq)
-    triples.map{
+    val triples = Source.fromFile(triplesFile).getLines().map(_.split("\t")).toSeq
+    val mappedTriples = triples.map{
       case x =>
         Array(entityID(x(0)),
-          relationID(x(2)),
-          entityID(x(1))) ++
+          relationID(x(1)),
+          entityID(x(2))) ++
           (if(!test) Array(Random.nextInt(numEntities).toFloat,
         Random.nextInt(numEntities).toFloat)
         else Nil)
     }
-            .grouped(batchSize).toSeq
+
+
+    (mappedTriples ++ mappedTriples.take(batchSize - (mappedTriples.size % batchSize)))
+      .grouped(batchSize).toSeq
 
     //        .map{
     //        case x =>
