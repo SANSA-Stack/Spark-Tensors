@@ -57,9 +57,9 @@ object DotSimilarity {
 //  }
 //}
 //
-class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray, testData: DataIter) {
+class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: NDArray, testData: DataIter, ctx: Context) {
   private val numItems = testWith.shape(testWith.shape.length - 1)
-  private val groundIter = testData.flatMap(_.data).toSeq
+  private val groundIter = testData.flatMap(_.data.map(_.copyTo(ctx))).toSeq
 
   private def predictIter = groundIter.iterator.map {
       triples: NDArray =>
@@ -69,7 +69,7 @@ class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: N
         repeatOriginal.T
   }
 
-  private def groundAxis = groundIter.iterator  .map(_.T.slice(testAxis).reshape(Shape(batchSize, 1)))
+  private def groundAxis = groundIter.iterator.map(_.T.slice(testAxis).reshape(Shape(batchSize, 1)))
 
   private def sortedPredict = predictIter.flatMap {
     batch: NDArray =>
@@ -77,21 +77,22 @@ class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: N
         predictions: NDArray =>
           val scores = predictions.reshape(Shape(batchSize, numItems))
           val sorted = NDArray.argsort(Map("is_ascend" -> false))(scores).get.T
-          sorted
+          sorted.copyTo(ctx)
       }
   }
 
   def hits(at: Int*): Seq[Float] = {
+//    println(groundAxis.size + " " + sortedPredict.size)
     val hits = (groundAxis zip sortedPredict) map {
       case (ground, predict) =>
         val hits =
           at.map {
           topK: Int =>
             val topKPredictions = predict.slice(0, topK).T
-            val hits = NDArray.broadcast_equal(ground, topKPredictions)
+            val hits = NDArray.broadcast_equal(ground.copyTo(ctx), topKPredictions.copyTo(ctx))
             NDArray.sum(hits).toScalar / batchSize
         }.toArray
-        NDArray.array(hits, Shape(1, at.size))
+        NDArray.array(hits, Shape(1, at.size), ctx)
     }
 
     val sum = hits.reduce(_ + _) / groundIter.size
@@ -101,8 +102,8 @@ class EvalMetrics(model: FeedForward, testAxis: Int, batchSize: Int, testWith: N
   def mrr: Float = {
     val mrr = (groundAxis zip sortedPredict) map {
       case (ground, predict) =>
-        val hits = NDArray.broadcast_equal(ground, predict.T)
-        println(hits.shape)
+        val hits = NDArray.broadcast_equal(ground.copyTo(ctx), predict.T.copyTo(ctx))
+//        println(hits.shape)
         val ranks = NDArray.argmax(Map("axis" -> 1))(hits) + 1f
         val mrr = NDArray.power(ranks, -1f)
         NDArray.sum(mrr).toScalar / batchSize
