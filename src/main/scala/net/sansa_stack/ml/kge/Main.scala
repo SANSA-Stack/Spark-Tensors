@@ -1,9 +1,10 @@
 package net.sansa_stack.ml.kge
 
 import ml.dmlc.mxnet.spark.MXNet
+import ml.dmlc.mxnet.spark.io.TransE
 import ml.dmlc.mxnet.{Context, NDArray}
+
 import scala.io.Source
-import net.sansa_stack.ml.kge.model.TransE
 
 
 /**
@@ -111,7 +112,8 @@ object Main extends App {
 //  val exec = embed.bind(Context.cpu(), args=Map("x" -> a))
 //  println(exec.outputs(0).toArray.mkString(","))
 
-  val model = new TransE(40943, 18, 100, 1000)
+//  val model = new TransE(40943, 18, 150, 1000)
+  val model = new TransE(262928, 47, 100, 1000)
   model.train()
 
 }

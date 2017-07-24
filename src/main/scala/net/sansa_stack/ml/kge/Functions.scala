@@ -11,12 +11,12 @@ import scala.collection.mutable
   * Created by nilesh on 31/05/2017.
   */
 object MaxMarginLoss {
-  def apply(margin: Float): (Symbol, Symbol) => Symbol = {
+  def apply(margin: Float): (Symbol, Symbol, Symbol) => Symbol = {
     loss(margin) _
   }
 
-  def loss(margin: Float)(positiveScore: Symbol, negativeScore: Symbol): Symbol = {
-    var loss = s.max(negativeScore - positiveScore + margin, 0)
+  def loss(margin: Float)(positiveScore: Symbol, negativeScore: Symbol, regressionLoss: Symbol): Symbol = {
+    var loss = s.Flatten()()(Map("data" -> s.max(negativeScore - positiveScore + margin, 0))) + regressionLoss
 //    loss = s.sum(name = "sum")()(Map("data" -> loss, "axis" -> Shape(0)))
     s.make_loss(name = "loss")()(Map("data" -> loss))
   }
@@ -45,7 +45,7 @@ object L2Similarity {
 
 object DotSimilarity {
   def apply(x: Symbol, y: Symbol): Symbol = {
-    s.dot("dot")()(Map("lhs" -> x, "rhs" -> y))
+    s.batch_dot("dot")()(Map("lhs" -> x, "rhs" -> y, "transpose_b" -> true))
   }
 }
 

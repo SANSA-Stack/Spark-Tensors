@@ -6,18 +6,95 @@ import ml.dmlc.mxnet.{Symbol => s}
 import scala.io.Source
 import scala.util.Random
 import ml.dmlc.mxnet.optimizer.{AdaGrad, Adam, SGD}
-import ml.dmlc.mxnet.spark.io.{LabeledPointIter, UnLabeledPointIter}
+//import ml.dmlc.mxnet.spark.io.{LabeledPointIter, UnLabeledPointIter}
 import ml.dmlc.mxnet.spark.io.{EvalMetrics, L2Similarity, MaxMarginLoss}
 import ml.dmlc.mxnet.spark.{MXNDArray, MXNet, MXNetModel, MXnet}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{SparseMatrix, Vectors}
 
 /**
   * Created by nilesh on 01/06/2017.
   */
 class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize: Int) {
-  def getNet(): (Symbol, Symbol, Seq[String]) = {
+  class Model(opt: Optimizer, trainSymbol: Symbol, scoreSymbol: Symbol, dataset: Seq[NDArray], paramNames: Seq[String], ctx: Context, dataName: String, labels: Option[Seq[NDArray]] = None) {
+    private val (argDict, gradDict, auxParams) = {
+      import ml.dmlc.mxnet.Xavier
+
+      val initializer = new Xavier(factorType = "in", magnitude = 2.34f)
+
+      //    val (argShapes, outputShapes, auxShapes) = transeModel.inferShape(
+      //      (for (paramName <- paramNames) yield paramName -> Shape(batchSize, 5))
+      //        toMap)
+
+      println("dataset.head.shape")
+      println(dataset.head.shape)
+      val (argShapes, outputShapes, auxShapes) = trainSymbol.inferShape(Map(
+        dataName -> dataset.head.shape
+      ))
+//        ++ (if(labels.isDefined) Map("linearregressionoutput0_label" -> Shape(batchSize, 1)) else Map()))
+
+      //    argShapes.foreach(x => println(x))
+
+      val argNames = trainSymbol.listArguments()
+      val argDict = argNames.zip(argShapes.map(NDArray.empty(_, ctx))).toMap
+      val gradDict = argNames.zip(argShapes).filter {
+        case (name, shape) =>
+          !paramNames.contains(name)
+      }.map(x => x._1 -> NDArray.empty(x._2, ctx)).toMap
+      argDict.foreach {
+        case (name, ndArray) =>
+          if (!paramNames.contains(name)) {
+            initializer.initWeight(name, ndArray)
+          }
+      }
+
+      val auxNames = trainSymbol.listAuxiliaryStates()
+      val auxParams = (auxNames zip auxShapes).map { case (name, shape) =>
+        (name, NDArray.zeros(shape, ctx))
+      }.toMap
+
+      (argDict, gradDict, auxParams)
+    }
+
+    val executor: Executor = trainSymbol.bind(ctx, argDict, gradDict)
+
+    private val paramsGrads = gradDict.toList.zipWithIndex.map { case ((name, grad), idx) =>
+      (idx, name, grad, opt.createState(idx, argDict(name)))
+    }
+
+    private var iter = 0
+
+    def trainBatch() = {
+      argDict(dataName).set(dataset(iter))
+      labels.foreach(x => argDict("linearregressionoutput0_label").set(x(iter).reshape(Shape(1000))))
+      iter += 1
+
+      if (iter >= dataset.length) iter = 0
+
+      executor.forward(isTrain = true)
+      executor.backward()
+
+      paramsGrads.foreach {
+        case (idx, name, grad, optimState) =>
+          opt.update(idx, argDict(name), grad, optimState)
+      }
+    }
+
+    def getFeedforwardModel: FeedForward = {
+      val model = FeedForward.newBuilder(scoreSymbol)
+        .setContext(ctx)
+        .setNumEpoch(0)
+        .setBeginEpoch(0)
+        .setOptimizer(opt)
+        .setArgParams(argDict)
+        .setAuxParams(auxParams)
+        .setup()
+      model
+    }
+  }
+
+  def getNet(): (Symbol, Symbol, Symbol, Seq[String]) = {
     // embedding weight vectors
     val entityWeight = s.Variable("entity_weight")
     val relationWeight = s.Variable("relation_weight")
@@ -32,12 +109,16 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     val input = s.Variable("data")
 //    val blah = s.flatten()()(Map("data" ->s.Variable("blah")))
 //    val blah2 = s.expand_dims()()(Map("data" -> blah, "axis" -> 0))
-    val splitInput = s.split()()(Map("data" -> input, "axis" -> 1, "num_outputs" -> 5))
+    val splitInput = s.split()()(Map("data" -> input, "axis" -> 1, "num_outputs" -> 8))
     var head = splitInput.get(0)
     var relation = splitInput.get(1)
     var tail = splitInput.get(2)
     var corruptHead = splitInput.get(3)
     var corruptTail = splitInput.get(4)
+
+    var litHead = splitInput.get(5)
+    var litRelation = splitInput.get(6)
+    var litValue = splitInput.get(7)
 
 //    println(splitInput.inferShape(Shape(1000,5))._1.mkString(","))
 
@@ -52,8 +133,14 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     tail = entityEmbedding(tail)
     corruptHead = entityEmbedding(corruptHead)
     corruptTail = entityEmbedding(corruptTail)
+    litHead = entityEmbedding(litHead)
+    litRelation = relationEmbedding(litRelation)
 
-    def getScore(head: Symbol, relation: Symbol, tail: Symbol) = L2Similarity(head + relation, tail)
+    var pred = head * relation
+    pred = s.sum_axis()()(Map("data" -> pred, "axis" -> Shape(2)))
+    val regressionLoss = s.Flatten()()(Map("data" -> s.square()()(Map("data" -> (litValue - pred)))))
+
+    def getScore(head: Symbol, relation: Symbol, tail: Symbol) = DotSimilarity(head * relation, tail)
 
     val posScore = getScore(head, relation, tail)
     val negScore = getScore(corruptHead, relation, corruptTail)
@@ -61,11 +148,7 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     println(posScore)
     println(negScore)
 
-    val loss = MaxMarginLoss(0.5f)(posScore, negScore)
-    val (argShapes, outShapes, auxShapes) = loss.inferShape(Map("data" -> Shape(batchSize, 5)))
-//    println(argShapes.mkString(","))
-    println(outShapes.mkString(","))
-    println(auxShapes.mkString(","))
+    val loss = MaxMarginLoss(0.5f)(posScore, negScore, regressionLoss)
 
     // Prediction model
     val score = {
@@ -90,51 +173,34 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
       val negScore = getScore(corruptHead, relation, corruptTail)
 
 //      MaxMarginLoss(1.0f)(posScore, negScore)
-      negScore
+      posScore
+    }
+
+    // Literals model
+    val literalLoss = {
+      val input = s.Variable("literaldata")
+      val label = s.Variable("linearregressionoutput0_label")
+      val splitInput = s.split()()(Map("data" -> input, "axis" -> 1, "num_outputs" -> 2))
+      var head = splitInput.get(0)
+      var relation = splitInput.get(1)
+      head = entityEmbedding(head)
+      relation = relationEmbedding(relation)
+      var pred = head * relation
+      pred = s.sum_axis()()(Map("data" -> pred, "axis" -> Shape(2)))
+//      pred = s.Flatten()()(Map("data" -> pred))
+      val loss = s.LinearRegressionOutput()()(Map("data" ->  pred, "label" -> label))
+      loss
     }
 
 
-    (loss, score, Seq("data", "blah"))
+    (loss, score, literalLoss, Seq("data", "literaldata", "blah"))
   }
 
   def train() = {
     val ctx = Context.gpu()
     val ctx2 = Context.gpu()
     //  val numEntities = 40943
-    val (transeModel, scoreModel, paramNames) = getNet()
-
-    import ml.dmlc.mxnet.Xavier
-
-    val initializer = new Xavier(factorType = "in", magnitude = 2.34f)
-
-//    val (argShapes, outputShapes, auxShapes) = transeModel.inferShape(
-//      (for (paramName <- paramNames) yield paramName -> Shape(batchSize, 5))
-//        toMap)
-
-    val (argShapes, outputShapes, auxShapes) = transeModel.inferShape(Map(
-      "data" -> Shape(batchSize, 5)
-    ))
-
-//    argShapes.foreach(x => println(x))
-
-    val argNames = transeModel.listArguments()
-    val argDict = argNames.zip(argShapes.map(NDArray.empty(_, ctx))).toMap
-    val gradDict = argNames.zip(argShapes).filter {
-      case (name, shape) =>
-        !paramNames.contains(name)
-    }.map(x => x._1 -> NDArray.empty(x._2, ctx)).toMap
-    argDict.foreach {
-      case (name, ndArray) =>
-        if (!paramNames.contains(name)) {
-          initializer.initWeight(name, ndArray)
-        }
-    }
-
-    val auxNames = transeModel.listAuxiliaryStates()
-    val auxParams = (auxNames zip auxShapes).map { case (name, shape) =>
-      (name, NDArray.zeros(shape, ctx))
-    }.toMap
-
+    val (transeModel, scoreModel, literalModel, paramNames) = getNet()
 
     //    println(argDict("entity_weight").shape)
 
@@ -165,68 +231,88 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
 
 //    val dataIter = new LabeledPointIter(input.toIterator, Shape(5), 1000)
 
-        val executor = transeModel.bind(ctx, argDict, gradDict)
-
-        val opt = new AdaGrad()
-        val paramsGrads = gradDict.toList.zipWithIndex.map { case ((name, grad), idx) =>
-          (idx, name, grad, opt.createState(idx, argDict(name)))
+        var inputStuff = readDataBatched("train").map{
+          case batch =>
+            NDArray.array(batch.flatten.toArray, Shape(batch.size, batch.head.size))
         }
 
-        val input = argDict("data")
-//        val blah = argDict("blah")
+        val literals = Random.shuffle(readLiteralMatrix())
+        var literalMatrix = NDArray.array(SparseMatrix.fromCOO(numEntities, numRelations, literals).toArray.map(_.toFloat),
+          Shape(numEntities, numRelations))
+        val means = NDArray.mean(literalMatrix, 0)
+        val sd = NDArray.sqrt(NDArray.mean(NDArray.square(NDArray.broadcast_minus(literalMatrix, means)), 0))
+        literalMatrix = NDArray.broadcast_div(NDArray.broadcast_minus(literalMatrix, means), sd)
 
-        val inputStuff = readDataBatched("train")
-
-    //    val (testSubjects, testRelations, testObjects, _, _) = readDataBatched("test")
-
-        var iter = 0
-        var minTestHits = 300f
-        println(inputStuff.size)
-        for (epoch <- 0 until (inputStuff.size * 10)) {
-          input.set(inputStuff(iter).flatten.toArray)
-//          blah.set(NDArray.zeros(batchSize, 1))
-          iter += 1
-
-          if (iter >= inputStuff.length) iter = 0
-
-          executor.forward(isTrain = true)
-          executor.backward()
-
-          paramsGrads.foreach {
-            case (idx, name, grad, optimState) =>
-              opt.update(idx, argDict(name), grad, optimState)
+        val literalData = {
+          var literalCoordinates = literals.map{
+            case (row: Int, col: Int, _) =>
+              Seq(row.toFloat, col.toFloat)
           }
 
-          //      println(s"iter $epoch, training Hits@1: ${Math.sqrt(Hits.hitsAt1(NDArray.ones(batchSize), executor.outputs(0)) / batchSize)}, min test Hits@1: $minTestHits")
+          literalCoordinates = literalCoordinates ++ literalCoordinates.take(batchSize - (literalCoordinates.size % batchSize))
 
-          println(s"iter $epoch, training loss: ${executor.outputs(0).toArray.sum}")
+          literalCoordinates.grouped(batchSize)
+            .map(x => NDArray.array(x.flatten.toArray, Shape(batchSize, 2)))
+            .toSeq
         }
 
-    val optimizer: Optimizer = new SGD(learningRate = 0.01f,
-      momentum = 0.9f, wd = 0.00001f)
-    val model2 = FeedForward.newBuilder(scoreModel)
-      .setContext(ctx)
-      .setNumEpoch(0)
-      .setBeginEpoch(0)
-      .setOptimizer(optimizer)
-      .setArgParams(argDict
-//        .map{
-//        case params @ (str: String, array: NDArray) =>
-//          if(str.contains("data"))
-//            (str, NDArray.slice_axis(array, 1, 0, 3).get)
-//          else
-//            params
-//      }
-      )
-      .setAuxParams(auxParams)
-      .setup()
+        val literalLabels = {
+          var literalValues = literals.map(_._3.toFloat)
+
+          literalValues = literalValues ++ literalValues.take(batchSize - (literalValues.size % batchSize))
+
+          literalValues.grouped(batchSize)
+            .map(x => NDArray.array(x.toArray, Shape(batchSize, 1)))
+            .toSeq
+        }
+
+    //        val (testSubjects, testRelations, testObjects, _, _) = readDataBatched("test")
+
+        var literalAll = {
+          var literalCoordValues = literals.map{
+            case (row: Int, col: Int, value: Double) =>
+              Seq(row, col, value.toFloat)
+          }
+
+          literalCoordValues = literalCoordValues ++ literalCoordValues.take(batchSize - (literalCoordValues.size % batchSize))
+
+          literalCoordValues.grouped(batchSize)
+            .map(x => NDArray.array(x.flatten.toArray, Shape(batchSize, 3)))
+            .toSeq
+        }
 
 
+        if(inputStuff.length < literalAll.length) {
+          inputStuff = inputStuff ++ inputStuff.take(literalAll.length - inputStuff.length)
+        } else if(inputStuff.length > literalAll.length) {
+          literalAll = literalAll ++ literalAll.take(inputStuff.length - literalAll.length)
+        }
+
+        val finalData = inputStuff.zip(literalAll).map {
+          case (triples: NDArray, literals: NDArray) =>
+            NDArray.concat(triples, literals, 2, 1).get
+        }
+
+        var minTestHits = 300f
+        println(inputStuff.size)
+        val opt = new AdaGrad()
+        val trainer = new Model(opt, transeModel, scoreModel, finalData, paramNames, ctx, "data")
+//        val literalTrainer = new Model(opt, literalModel, scoreModel, literalData, paramNames, ctx, "literaldata", labels = Some(literalLabels))
+        for (iter <- 0 until inputStuff.size * 10) {
+          trainer.trainBatch()
+//          literalTrainer.trainBatch()
+          //      println(s"iter $epoch, training Hits@1: ${Math.sqrt(Hits.hitsAt1(NDArray.ones(batchSize), executor.outputs(0)) / batchSize)}, min test Hits@1: $minTestHits")
+          println(s"Entity model: iter $iter, training loss: ${trainer.executor.outputs(0).toArray.sum}")
+//          println(s"Literal model: iter $iter, training loss: ${literalTrainer.executor.outputs(0).toArray.sum}")
+        }
+
+
+    val model2 = trainer.getFeedforwardModel
 
     val vectors = Random.shuffle(readDataBatched("train", test = false).flatten.map{
       case x =>
         LabeledPoint(0.0, Vectors.dense(x.map(_.toDouble)))
-    }).take(10000).map(_.features)
+    }).take(50000).map(_.features)
     val dt = new MyPointIter(vectors.toIterator, Shape(5), batchSize, "data", "label", ctx)
 //    println(dt.next().data.head.shape)
 //    println(dt.next().data.size)
@@ -281,9 +367,9 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
   }
 
   def readDataBatched(stage: String, test: Boolean = false) = {
-    val triplesFile = s"/data/yago/$stage.txt"
-    val entityIDFile = "/data/yago/entity2id.txt"
-    val relationIDFile = "/data/yago/relation2id.txt"
+    val triplesFile = s"/data/yago/subgraph/exp/$stage.txt"
+    val entityIDFile = "/data/yago/subgraph/exp/entity2id.txt"
+    val relationIDFile = "/data/yago/subgraph/exp/relation2id.txt"
 
     def getIDMap(path: String) = Source.fromFile(path)
       .getLines()
@@ -324,5 +410,34 @@ class TransE(numEntities: Int, numRelations: Int, latentFactors: Int, batchSize:
     //        triples.map(x => entityID(x(1))).toArray.grouped(batchSize).toSeq,
     //        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(batchSize).toSeq,
     //        triples.map(x => Random.nextInt(numEntities).toFloat).toArray.grouped(batchSize).toSeq)
+  }
+
+  def readLiteralMatrix() = {
+    val literalsFile = "/data/yago/subgraph/exp/literals.txt"
+    val entityIDFile = "/data/yago/subgraph/exp/entity2id.txt"
+    val relationIDFile = "/data/yago/subgraph/exp/relationwl2id.txt"
+
+    def getIDMap(path: String) = Source.fromFile(path)
+      .getLines()
+      .map(_.split("\t"))
+      .map(x => x(0) -> x(1).toInt).toMap
+
+    val entityID = getIDMap(entityIDFile)
+    val relationID = getIDMap(relationIDFile)
+
+    val triples = Source.fromFile(literalsFile).getLines().map(_.split("\t")).toSeq
+    val mappedTriples = triples.flatMap{
+      case x =>
+        try {
+          Seq((entityID(x(0)),
+            relationID(x(1)),
+            x(3).toDouble))
+        } catch {
+          case ex: Exception =>
+            Nil
+        }
+    }
+
+    mappedTriples
   }
 }
