@@ -112,8 +112,12 @@ object Main extends App {
 //  val exec = embed.bind(Context.cpu(), args=Map("x" -> a))
 //  println(exec.outputs(0).toArray.mkString(","))
 
-//  val model = new TransE(40943, 18, 150, 1000)
-  val model = new TransE(262928, 47, 100, 1000)
+//  val model = new TransE(40943, 18, 100, 1000)
+  val model = new TransE(262928, 47, 100, 100)
   model.train()
 
 }
+
+// 0 -> literals ermlp
+// 1 -> entity test transe
+// 2 -> ermlp normal wider margin

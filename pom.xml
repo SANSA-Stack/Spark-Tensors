@@ -101,7 +101,7 @@
                 <version>1.5</version>
                 <executions>
                     <execution>
-                        <phase>package</phase>
+                        <phase>none</phase>
                         <goals>
                             <goal>shade</goal>
                         </goals>
@@ -355,17 +355,22 @@
         </profile>
         <profile>
             <id>linux-x86_64-cpu</id>
-            <activation>
-                <os>
-                    <family>linux</family>
-                </os>
-            </activation>
+            <!--<activation>-->
+                <!--<os>-->
+                    <!--<family>linux</family>-->
+                <!--</os>-->
+            <!--</activation>-->
             <properties>
                 <platform>linux-x86_64-cpu</platform>
             </properties>
         </profile>
         <profile>
             <id>linux-x86_64-gpu</id>
+            <activation>
+                <os>
+                    <family>linux</family>
+                </os>
+            </activation>
             <properties>
                 <platform>linux-x86_64-gpu</platform>
             </properties>
