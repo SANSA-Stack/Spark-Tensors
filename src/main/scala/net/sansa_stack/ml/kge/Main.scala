@@ -112,8 +112,9 @@ object Main extends App {
 //  val exec = embed.bind(Context.cpu(), args=Map("x" -> a))
 //  println(exec.outputs(0).toArray.mkString(","))
 
-//  val model = new TransE(40943, 18, 150, 1000)
-  val model = new TransE(262928, 47, 100, 1000)
+  val model = new TransE(40943, 18, 50, 14200)
+//  val model = new TransE(262928, 19, 100, 100)
+//  val model = new TransE(262928, 47, 100, 500, true)
   model.train()
 
 }
