@@ -1,4 +1,4 @@
-package ml.dmlc.mxnet.spark.io
+package net.sansa_stack.ml.kge
 
 import ml.dmlc.mxnet._
 import ml.dmlc.mxnet.io.NDArrayIter

@@ -1,7 +1,7 @@
 package net.sansa_stack.ml.kge
 
 import ml.dmlc.mxnet.spark.MXNet
-import ml.dmlc.mxnet.spark.io.TransE
+import ml.dmlc.mxnet.spark.io.TransEOld
 import ml.dmlc.mxnet.{Context, NDArray}
 
 import scala.io.Source
@@ -14,6 +14,7 @@ object Main extends App {
   /**
    * Pretty prints a Scala value similar to its source represention.
    * Particularly useful for case classes.
+ *
    * @param a - The value to pretty print.
    * @param indentSize - Number of spaces for each indent.
    * @param maxElementWidth - Largest element size before wrapping.
@@ -112,9 +113,9 @@ object Main extends App {
 //  val exec = embed.bind(Context.cpu(), args=Map("x" -> a))
 //  println(exec.outputs(0).toArray.mkString(","))
 
-  val model = new TransE(40943, 18, 50, 14200)
-//  val model = new TransE(262928, 19, 100, 100)
-//  val model = new TransE(262928, 47, 100, 500, true)
+  val model = new TransEOld(40943, 18, 100, 14200, 100)
+//  val model = new TransE(262928, 19, 100, 18683, 100)
+//  val model = new TransE(262928, 47, 100, 100, 100, true)
   model.train()
 
 }

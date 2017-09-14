@@ -1,26 +1,68 @@
 package net.sansa_stack.ml.kge.model
 
-import ml.dmlc.mxnet.{EpochEndCallback, NDArray}
+import ml.dmlc.mxnet.module.Module
+import ml.dmlc.mxnet.{Symbol => s, _}
+import ml.dmlc.mxnet.Symbol
+import ml.dmlc.mxnet.spark.MXNet
+import net.sansa_stack.rdf.spark.model.TripleRDD.tripleFunctions
+import org.apache.jena.graph.{Triple => JTriple}
+import org.apache.spark.rdd.RDD
+
+import scala.util.Random
 
 /**
-  * Created by nilesh on 7/7/17.
+  * Created by nilesh on 13/09/2017.
   */
 trait KgeModel {
-  def predictionModel(head: Symbol, relation: Symbol, tail: Symbol): Symbol
-  def trainingModel(head: Symbol, relation: Symbol, tail: Symbol,
-                    corruptedHead: Symbol, corruptedTail: Symbol): Symbol
-  def train(lr: Float, )
+  val numEntities: Int
+  val numRelations: Int
+  val latentFactors: Int
+  val trainBatchSize: Int
+  val testBatchSize: Int
+
+  protected val entityWeight = s.Variable("entity_weight")
+  protected val relationWeight = s.Variable("relation_weight")
+
+  private val input = s.split()()(Map("data" -> s.Variable("data"), "axis" -> 1, "num_outputs" -> 5))
+  protected val head = entityEmbedding(input.get(0))
+  protected val relation = relationEmbedding(input.get(1))
+  protected val tail = entityEmbedding(input.get(2))
+  protected val corruptHead = entityEmbedding(input.get(3))
+  protected val corruptTail = entityEmbedding(input.get(4))
+
+  protected def entityEmbedding(id: Symbol): Symbol
+  protected def relationEmbedding(id: Symbol): Symbol
+
+  def getLoss: Symbol
+  def getScore: Symbol
 }
 
-object Callbacks {
-  class KgeEpochEnd(validationData: NDArray) extends EpochEndCallback {
-    override def invoke(epoch: Int, symbol: Symbol,
-                        argParams: Map[String, NDArray],
-                        auxStates: Map[String, NDArray]): Unit = {
-      val numEntities = argParams("entity_weight").shape(0)
-      val numRelations = argParams("relation_weight").shape(0)
+trait NegativeSampler {
+  val model: KgeModel
 
+  protected def corruptSample(s: Int, p: Int, o: Int): (Int, Int, Int) = {
+    if(Random.nextInt(2) == 0)
+      (Random.nextInt(model.numEntities), p, o)
+    else
+      (s, p, Random.nextInt(model.numEntities))
+  }
+}
 
-    }
+class SequentialTrainer(val model: KgeModel,
+                        val initializer: Initializer,
+                        val optimizer: Optimizer,
+                        val contexts: Array[Context]) extends NegativeSampler {
+  private val trainModule = new Module(model.getLoss, contexts=Context.gpu())
+  private val testModule = new Module(model.getScore)
+
+  def fit(trainData: DataIter, validationData: Option[DataIter] = None) = {
+    trainModule.bind(trainData.provideData)
+    trainModule.initParams(initializer)
+    trainModule.initOptimizer(optimizer = optimizer)
+    trainModule.installMonitor()
+    trainModule.fit(trainData, validationData)
+  }
+  def predict(data: DataIter) = {
+
   }
 }
