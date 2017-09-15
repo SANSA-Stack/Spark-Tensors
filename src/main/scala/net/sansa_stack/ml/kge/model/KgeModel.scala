@@ -3,6 +3,7 @@ package net.sansa_stack.ml.kge.model
 import ml.dmlc.mxnet.module.Module
 import ml.dmlc.mxnet.{Symbol => s, _}
 import ml.dmlc.mxnet.Symbol
+import ml.dmlc.mxnet.optimizer.AdaGrad
 import ml.dmlc.mxnet.spark.MXNet
 import net.sansa_stack.rdf.spark.model.TripleRDD.tripleFunctions
 import org.apache.jena.graph.{Triple => JTriple}
@@ -48,18 +49,34 @@ trait NegativeSampler {
   }
 }
 
-class SequentialTrainer(val model: KgeModel,
-                        val initializer: Initializer,
-                        val optimizer: Optimizer,
-                        val contexts: Array[Context]) extends NegativeSampler {
+class ModelTrainer(val model: KgeModel, val name: String) extends NegativeSampler {
   private val trainModule = new Module(model.getLoss, contexts=Context.gpu())
   private val testModule = new Module(model.getScore)
 
-  def fit(trainData: DataIter, validationData: Option[DataIter] = None) = {
+  def fit(trainData: DataIter,
+          validationData: Option[DataIter] = None,
+          numExamples: Int,
+          batchSize: Int,
+          learningRate: Float,
+          weightDecay: Float,
+          devs: Array[Context],
+          earlyStopping: Boolean = true) = {
+    val checkpoint = new EpochEndCallback {
+        override def invoke(epoch: Int, symbol: Symbol,
+                            argParams: Map[String, NDArray],
+                            auxParams: Map[String, NDArray]): Unit = {
+          Model.saveCheckpoint(name, epoch + 1, symbol, argParams, auxParams)
+        }
+      }
+
+    val epochSize = numExamples / batchSize
+
     trainModule.bind(trainData.provideData)
-    trainModule.initParams(initializer)
-    trainModule.initOptimizer(optimizer = optimizer)
-    trainModule.installMonitor()
+    trainModule.initParams(new Xavier(factorType = "in", magnitude = 2.34f))
+    trainModule.initOptimizer(optimizer = new AdaGrad(learningRate = learningRate, wd = weightDecay))
+
+
+
     trainModule.fit(trainData, validationData)
   }
   def predict(data: DataIter) = {
