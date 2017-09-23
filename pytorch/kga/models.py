@@ -390,6 +390,7 @@ class ERMLP(Model):
         self.emb_L = nn.Embedding(self.n_r, self.k)
         self.fc1 = nn.Linear(3*k, h_dim)
         self.bn1 = nn.BatchNorm1d(h_dim)
+        self.dropout1 = nn.Dropout(p=0.5)
         self.fc2 = nn.Linear(h_dim, 1)
 
         # Initialize embeddings
@@ -400,7 +401,6 @@ class ERMLP(Model):
 
         # Normalize rel embeddings
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-        # Normalize entity embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
         # Xavier init for fc weights
@@ -422,7 +422,7 @@ class ERMLP(Model):
 
         # Forward
         phi = torch.cat([e_hs, e_ts, e_ls], 1)  # M x 3k
-        h = F.relu(self.bn1(self.fc1(phi)))
+        h = self.dropout1(F.relu(self.bn1(self.fc1(phi))))
         y_logit = self.fc2(h)
         y_prob = F.sigmoid(y_logit)
 
@@ -430,7 +430,7 @@ class ERMLP(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true)
+        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
 
 
 @inherit_docstrings
