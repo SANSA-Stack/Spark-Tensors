@@ -16,6 +16,7 @@ class Model(nn.Module):
 
     def __init__(self):
         super(Model, self).__init__()
+        self.embeddings = []
 
     def forward(self, X):
         """
@@ -70,6 +71,10 @@ class Model(nn.Module):
         """
         raise NotImplementedError
 
+    def normalize_embeddings(self):
+        for e in self.embeddings:
+            e.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+
 
 @inherit_docstrings
 class ERLMLP(Model):
@@ -119,6 +124,8 @@ class ERLMLP(Model):
         self.fc_literal = nn.Linear(self.n_a, self.l)
         self.fc1 = nn.Linear(3*k+l, h_dim)
         self.fc2 = nn.Linear(h_dim, 1)
+
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -199,7 +206,7 @@ class ERLMLP(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true)
+        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
 
 
 @inherit_docstrings
@@ -239,6 +246,8 @@ class RESCAL(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k**2)
 
+        self.embeddings = [self.emb_E, self.emb_L]
+
         # Initialize embeddings
         r1 = 6/np.sqrt(k)
         r2 = 6/k
@@ -275,7 +284,7 @@ class RESCAL(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true)
+        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
 
 
 @inherit_docstrings
@@ -313,6 +322,8 @@ class DistMult(Model):
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
+
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -392,6 +403,8 @@ class ERMLP(Model):
         self.bn1 = nn.BatchNorm1d(h_dim)
         self.dropout1 = nn.Dropout(p=0.5)
         self.fc2 = nn.Linear(h_dim, 1)
+
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -476,6 +489,8 @@ class TransE(Model):
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
+
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)

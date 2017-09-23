@@ -84,8 +84,13 @@ for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
     print('----------------')
 
+    X_train_neg = sample_negatives2(X_train_neg, n_e)
+    idxs = np.random.choice(np.arange(X_train_neg.shape[1]), size=M_train, replace=False)
+    X_train_neg = X_train_neg[:, idxs]
+
     mb_iter = get_minibatches(X_train, mb_size)
     mb_neg_iter = get_minibatches(X_train_neg, mb_size)
+
     it = 0
 
     for X_mb, X_neg_mb in zip(mb_iter, mb_neg_iter):
@@ -102,6 +107,7 @@ for epoch in range(n_epoch):
         loss = model.loss(y, y_true_mb)
         loss.backward()
         solver.step()
+        model.normalize_embeddings()
 
         end = time()
 
