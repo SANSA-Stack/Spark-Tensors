@@ -42,6 +42,7 @@ args = parser.parse_args()
 X_train, n_e, n_r = load_data_bin('data/{}/bin/train.npy'.format(args.dataset))
 X_val, _, _ = load_data_bin('data/{}/bin/val.npy'.format(args.dataset))
 
+M_train = X_train.shape[1]
 M_val = X_val.shape[1]
 
 # Initialize model
@@ -65,19 +66,32 @@ checkpoint_path = '{}/{}.bin'.format(checkpoint_dir, args.model)
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
+# Load up negative samples
+X_train_neg = np.load('data/{}/bin/train_neg.npy'.format(args.dataset))
+idxs = np.random.choice(np.arange(X_train_neg.shape[1]), size=M_train, replace=False)
+X_train_neg = X_train_neg[:, idxs]
+
+# Load up validation set
+X_neg_val = np.load('data/{}/bin/val_neg.npy'.format(args.dataset))
+idxs = np.random.choice(np.arange(X_neg_val.shape[1]), size=M_val, replace=False)
+X_neg_val = X_neg_val[:, idxs]
+X_all_val = np.hstack([X_val, X_neg_val])
+y_true_val = np.vstack([np.ones([M_val, 1]), np.zeros([M_val, 1])])
+
+
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
     print('----------------')
 
     mb_iter = get_minibatches(X_train, mb_size)
+    mb_neg_iter = get_minibatches(X_train_neg, mb_size)
     it = 0
 
-    for X_mb in mb_iter:
+    for X_mb, X_neg_mb in zip(mb_iter, mb_neg_iter):
         start = time()
 
         # Build batch with negative sampling and literals
-        X_neg_mb = sample_negatives(X_mb, n_e=n_e)
         X_train_mb = np.hstack([X_mb, X_neg_mb])
 
         m = X_mb.shape[1]
@@ -93,19 +107,16 @@ for epoch in range(n_epoch):
 
         if it % print_every == 0:
             # Test on validation
-            X_neg_val = sample_negatives(X_val, n_e=n_e)
-            X_all_val = np.hstack([X_val, X_neg_val])
-            y_true_val = np.vstack([np.ones([M_val, 1]), np.zeros([M_val, 1])])
-
             y_pred_val = model.predict(X_all_val)
 
             if args.model != 'transe':
                 # Metrics
+                train_acc = accuracy(model.predict(X_train_mb), y_true_mb)
                 val_acc = accuracy(y_pred_val, y_true_val)
                 val_auc = auc(y_pred_val, y_true_val)
 
-                print('Iter-{}; loss: {:.4f}; val_acc: {:.4f}; val_auc: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], val_acc, val_auc, end-start))
+                print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; val_acc: {:.4f}; val_auc: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], train_acc, val_acc, val_auc, end-start))
             else:
                 # For TransE, just show energy/loss
                 print('Iter-{}; loss: {:.4f}; time per batch: {:.2f}s'

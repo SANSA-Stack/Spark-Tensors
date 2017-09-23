@@ -26,21 +26,39 @@ def sample_negatives(X, n_e):
         Similar to input param X, but at each column, either first or third row
         is subtituted with random entity.
     """
-    corr = np.random.randint(n_e, size=X.shape[1])
+    M = X.shape[1]
+    X_corr = np.copy(X)
 
-    X_corr = np.zeros_like(X)
-    X_corr[1, :] = X[1, :]
+    corr = np.random.randint(n_e, size=M)
 
-    if np.random.randn() > 0.5:
-        # Corrupt heads
-        X_corr[0, :] = corr
-        X_corr[2, :] = X[2, :]
-    else:
-        # Corrupt tails
-        X_corr[0, :] = X[0, :]
-        X_corr[2, :] = corr
+    e_idxs = np.random.choice([0, 2], size=M)
+    x_idxs = np.arange(M)
+    idxs = np.column_stack((e_idxs, x_idxs))
+
+    X_corr[idxs[:, 0], idxs[:, 1]] = corr
 
     return X_corr
+
+
+def sample_negatives2(X, n_e):
+    M = X.shape[1]
+    X_corr = []
+
+    for x in X.T:
+        h, t = x[0], x[2]
+
+        hc = np.random.randint(n_e)
+        while hc == h: hc = np.random.randint(n_e)
+
+        r = x[1]
+
+        tc = np.random.randint(n_e)
+        while tc == t: tc = np.random.randint(n_e)
+
+        X_corr.append([hc, r, t])
+        X_corr.append([h, r, tc])
+
+    return np.array(X_corr, dtype=int).T
 
 
 def load_data(file_path):
