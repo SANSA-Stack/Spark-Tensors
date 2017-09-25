@@ -125,7 +125,7 @@ class ERLMLP(Model):
         self.fc1 = nn.Linear(3*k+l, h_dim)
         self.fc2 = nn.Linear(h_dim, 1)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -134,6 +134,7 @@ class ERLMLP(Model):
         self.emb_L.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
+        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X, X_lit):
@@ -156,9 +157,6 @@ class ERLMLP(Model):
         y: Mx1 vectors
             Contains the probs result of each M data.
         """
-        # Normalize entity embeddings
-        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-
         # Decompose X into head, relationship, tail
         hs, ls, ts = X
 
@@ -246,7 +244,7 @@ class RESCAL(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k**2)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E]
 
         # Initialize embeddings
         r1 = 6/np.sqrt(k)
@@ -256,6 +254,7 @@ class RESCAL(Model):
         self.emb_L.weight.data.uniform_(-r2, r2)
 
         # Normalize rel embeddings
+        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
@@ -320,7 +319,7 @@ class DistMult(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -329,12 +328,10 @@ class DistMult(Model):
         self.emb_L.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
+        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
-        # Normalize entity embeddings
-        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-
         # Decompose X into head, relationship, tail
         hs, ls, ts = X
 
@@ -399,12 +396,14 @@ class ERMLP(Model):
 
         self.mlp = nn.Sequential(
             nn.Linear(3*k, h_dim),
+            nn.BatchNorm1d(h_dim),
             nn.ReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(h_dim, 1),
             nn.Sigmoid()
         )
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -484,7 +483,7 @@ class TransE(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -493,6 +492,7 @@ class TransE(Model):
         self.emb_L.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
+        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
@@ -515,9 +515,6 @@ class TransE(Model):
             corrupted head, corrupted tail.
         """
         M = X.shape[1]
-
-        # Normalize entity embeddings
-        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
         # Negative sampling
         X_neg = X[:, int(M/2):]

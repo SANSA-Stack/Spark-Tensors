@@ -93,10 +93,10 @@ print()
 print('Relations nearest neighbours:')
 print('----------------------------')
 
-e_nn = relation_nn(model, n=nn_n, k=nn_k)
+r_nn = relation_nn(model, n=nn_n, k=nn_k)
 
-for nn in e_nn:
+for nn in r_nn:
     print('{}: '.format(idx2rel[nn[0]]), end='')
-    for e in nn[1:]:
-        print('{}, '.format(idx2rel[e]), end='')
+    for r in nn[1:]:
+        print('{}, '.format(idx2rel[r]), end='')
     print('\n')

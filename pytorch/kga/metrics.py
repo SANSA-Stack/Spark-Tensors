@@ -110,34 +110,38 @@ def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
 def entity_nn(model, n=10, k=5):
     """
     Compute nearest neighbours of all entities embeddings of a model.
-    The criterion is cosine distance.
 
     Params:
     -------
     model: instance of kga.Model
+
+    n: int, default: 10
+        Number of (random) entities to be queried.
 
     k: int, default: 5
         Number of nearest neighbours.
     """
     emb = model.emb_E.weight.data.numpy()
-    emb = emb[np.random.randint(emb.shape[0], size=n), :]
-    mat = scipy.spatial.distance.cdist(emb, emb, metric='cosine')
-    return np.argsort(mat, axis=1)[:, :10]
+    mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
+    idxs = np.random.randint(emb.shape[0], size=n)
+    return np.argsort(mat, axis=1)[idxs, :10]
 
 
 def relation_nn(model, n=10, k=5):
     """
     Compute nearest neighbours of all relations embeddings of a model.
-    The criterion is cosine distance.
 
     Params:
     -------
     model: instance of kga.Model
 
+    n: int, default: 10
+        Number of (random) relations to be queried.
+
     k: int, default: 5
         Number of nearest neighbours.
     """
     emb = model.emb_L.weight.data.numpy()
-    emb = emb[np.random.randint(emb.shape[0], size=n), :]
-    mat = scipy.spatial.distance.cdist(emb, emb, metric='cosine')
-    return np.argsort(mat, axis=1)[:, :10]
+    mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
+    idxs = np.random.randint(emb.shape[0], size=n)
+    return np.argsort(mat, axis=1)[idxs, :10]
