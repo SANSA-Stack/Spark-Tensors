@@ -107,6 +107,7 @@ for epoch in range(n_epoch):
         loss = model.loss(y, y_true_mb)
         loss.backward()
         solver.step()
+        solver.zero_grad()
         model.normalize_embeddings()
 
         end = time()
