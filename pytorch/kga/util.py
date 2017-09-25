@@ -41,6 +41,28 @@ def sample_negatives(X, n_e):
 
 
 def sample_negatives2(X, n_e):
+    """
+    Perform negative sampling by corrupting head or tail of each triplets in
+    dataset.
+    In this function, the replacement entities will be guaranteed to be
+    different to the original entities.
+
+    Params:
+    -------
+    X: int matrix of 3 x M, where M is the (mini)batch size
+        First row contains index of head entities.
+        Second row contains index of relationships.
+        Third row contains index of tail entities.
+
+    n_e: int
+        Number of entities in dataset.
+
+    Returns:
+    --------
+    X_corr: int matrix of 3 x M, where M is the (mini)batch size
+        Similar to input param X, but at each column, either first or third row
+        is subtituted with random entity.
+    """
     M = X.shape[1]
     X_corr = []
 
@@ -82,6 +104,12 @@ def load_data(file_path):
 
     n_r: int
         Total number of unique relations in the dataset.
+
+    idx2ent: list
+        Lookup table to recover entity name from its index.
+
+    idx2rel: list
+        Lookup table to recover relation name from its index.
     """
     df = pd.read_csv(file_path, sep='\t', header=None)
 
@@ -94,6 +122,9 @@ def load_data(file_path):
     n_e = entities.shape[0]  # num of entities
     n_r = relations.shape[0]  # num of relations
 
+    idx2ent = entities.tolist()
+    idx2rel = relations.tolist()
+
     ent2idx = {e: idx for idx, e in enumerate(entities)}
     rel2idx = {r: idx for idx, r in enumerate(relations)}
 
@@ -104,7 +135,7 @@ def load_data(file_path):
         X[1, i] = rel2idx[row[1]]
         X[2, i] = ent2idx[row[2]]
 
-    return X, n_e, n_r
+    return X, n_e, n_r, idx2ent, idx2rel
 
 
 def load_data_bin(file_path):

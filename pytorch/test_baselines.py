@@ -70,3 +70,33 @@ else:
     print('MRR: {}, Hits@2: {}'.format(
         *eval_embeddings(model, X_test, n_e, k=args.k, mode='asc'))
     )
+
+nn_n = 10
+nn_k = 5
+
+idx2ent = np.load('data/{}/bin/idx2ent.npy'.format(args.dataset))
+idx2rel = np.load('data/{}/bin/idx2rel.npy'.format(args.dataset))
+
+print()
+print('Entities nearest neighbours:')
+print('----------------------------')
+
+e_nn = entity_nn(model, n=nn_n, k=nn_k)
+
+for nn in e_nn:
+    print('{}: '.format(idx2ent[nn[0]]), end='')
+    for e in nn[1:]:
+        print('{}, '.format(idx2ent[e]), end='')
+    print('\n')
+
+print()
+print('Relations nearest neighbours:')
+print('----------------------------')
+
+e_nn = relation_nn(model, n=nn_n, k=nn_k)
+
+for nn in e_nn:
+    print('{}: '.format(idx2rel[nn[0]]), end='')
+    for e in nn[1:]:
+        print('{}, '.format(idx2rel[e]), end='')
+    print('\n')

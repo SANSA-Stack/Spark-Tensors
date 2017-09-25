@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.spatial.distance
 from sklearn.metrics import roc_auc_score
 
 
@@ -104,3 +105,39 @@ def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
     hitsk = np.mean(ranks <= k)
 
     return mrr, hitsk
+
+
+def entity_nn(model, n=10, k=5):
+    """
+    Compute nearest neighbours of all entities embeddings of a model.
+    The criterion is cosine distance.
+
+    Params:
+    -------
+    model: instance of kga.Model
+
+    k: int, default: 5
+        Number of nearest neighbours.
+    """
+    emb = model.emb_E.weight.data.numpy()
+    emb = emb[np.random.randint(emb.shape[0], size=n), :]
+    mat = scipy.spatial.distance.cdist(emb, emb, metric='cosine')
+    return np.argsort(mat, axis=1)[:, :10]
+
+
+def relation_nn(model, n=10, k=5):
+    """
+    Compute nearest neighbours of all relations embeddings of a model.
+    The criterion is cosine distance.
+
+    Params:
+    -------
+    model: instance of kga.Model
+
+    k: int, default: 5
+        Number of nearest neighbours.
+    """
+    emb = model.emb_L.weight.data.numpy()
+    emb = emb[np.random.randint(emb.shape[0], size=n), :]
+    mat = scipy.spatial.distance.cdist(emb, emb, metric='cosine')
+    return np.argsort(mat, axis=1)[:, :10]
