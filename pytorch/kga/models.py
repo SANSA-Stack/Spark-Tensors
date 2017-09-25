@@ -259,9 +259,6 @@ class RESCAL(Model):
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
-        # Normalize entity embeddings
-        self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-
         # Decompose X into head, relationship, tail
         hs, ls, ts = X
 
@@ -399,10 +396,13 @@ class ERMLP(Model):
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
-        self.fc1 = nn.Linear(3*k, h_dim)
-        self.bn1 = nn.BatchNorm1d(h_dim)
-        self.dropout1 = nn.Dropout(p=0.5)
-        self.fc2 = nn.Linear(h_dim, 1)
+
+        self.mlp = nn.Sequential(
+            nn.Linear(3*k, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, 1),
+            nn.Sigmoid()
+        )
 
         self.embeddings = [self.emb_E, self.emb_L]
 
@@ -415,10 +415,6 @@ class ERMLP(Model):
         # Normalize rel embeddings
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-
-        # Xavier init for fc weights
-        self.fc1.weight.data.normal_(0, 1/np.sqrt(3*k/2))
-        self.fc2.weight.data.normal_(0, 1/np.sqrt(h_dim/2))
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
@@ -435,9 +431,7 @@ class ERMLP(Model):
 
         # Forward
         phi = torch.cat([e_hs, e_ts, e_ls], 1)  # M x 3k
-        h = self.dropout1(F.relu(self.bn1(self.fc1(phi))))
-        y_logit = self.fc2(h)
-        y_prob = F.sigmoid(y_logit)
+        y_prob = self.mlp(phi)
 
         return y_prob
 
