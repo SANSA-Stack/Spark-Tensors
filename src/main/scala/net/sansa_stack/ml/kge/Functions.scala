@@ -5,6 +5,7 @@ import ml.dmlc.mxnet.io.NDArrayIter
 import ml.dmlc.mxnet.module.Module
 import ml.dmlc.mxnet.spark.io.{LabeledPointIter, PointIter}
 import ml.dmlc.mxnet.{Symbol => s}
+//import net.sansa_stack.ml.kge.model.ModelTrainer
 
 import scala.collection.mutable
 

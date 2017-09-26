@@ -546,7 +546,7 @@ class TransEOld(numEntities: Int, numRelations: Int, latentFactors: Int, batchSi
 //        val literalTrainer = new Model(opt, literalModel, scoreModel, literalData, paramNames, ctx, "literaldata", labels = Some(literalLabels))
 
 
-      for (iter <- 0 until size * 200) {
+      for (iter <- 0 until size * 1) {
         if (!dataIter.hasNext || (iter > 0 && iter % size == 0)) {
           println("Epoch end!")
           inputStuff = readDataBatched("train").flatten.map{
