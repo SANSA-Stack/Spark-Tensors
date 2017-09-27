@@ -24,6 +24,8 @@ parser.add_argument('--lr', type=float, default=0.1, metavar='',
                     help='learning rate (default: 0.1)')
 parser.add_argument('--decay', type=float, default=1e-4, metavar='',
                     help='L2 weight decay (default: 1e-4)')
+parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
+                    help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--h', type=int, default=100, metavar='',
                     help='size of ER-MLP hidden layer (default: 100)')
 parser.add_argument('--mbsize', type=int, default=100, metavar='',
@@ -34,6 +36,8 @@ parser.add_argument('--log_interval', type=int, default=100, metavar='',
                     help='interval between training status logs (default: 100)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
                     help='directory to save model checkpoint, saved every epoch (default: models/)')
+parser.add_argument('--resume', default=False, metavar='',
+                    help='resume the training from latest checkpoint (default: False')
 
 args = parser.parse_args()
 
@@ -49,11 +53,17 @@ M_val = X_val.shape[1]
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h),
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h, p=args.dropout_p),
     'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma)
 }
 
 model = models[args.model]
+
+# Resume from latest checkpoint if specified
+if args.resume:
+    model.load_state_dict(
+        torch.load('models/{}/{}.bin'.format(args.dataset, args.model))
+    )
 
 # Training params
 solver = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.decay)
@@ -65,11 +75,6 @@ checkpoint_path = '{}/{}.bin'.format(checkpoint_dir, args.model)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
-
-# Load up negative samples
-X_train_neg = np.load('data/{}/bin/train_neg.npy'.format(args.dataset))
-idxs = np.random.choice(np.arange(X_train_neg.shape[1]), size=M_train, replace=False)
-X_train_neg = X_train_neg[:, idxs]
 
 # Load up validation set
 X_neg_val = np.load('data/{}/bin/val_neg.npy'.format(args.dataset))
@@ -84,22 +89,17 @@ for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
     print('----------------')
 
-    X_train_neg = sample_negatives2(X_train_neg, n_e)
-    idxs = np.random.choice(np.arange(X_train_neg.shape[1]), size=M_train, replace=False)
-    X_train_neg = X_train_neg[:, idxs]
-
     mb_iter = get_minibatches(X_train, mb_size)
-    mb_neg_iter = get_minibatches(X_train_neg, mb_size)
-
     it = 0
 
-    for X_mb, X_neg_mb in zip(mb_iter, mb_neg_iter):
+    for X_mb in mb_iter:
         start = time()
 
         # Build batch with negative sampling and literals
-        X_train_mb = np.hstack([X_mb, X_neg_mb])
-
         m = X_mb.shape[1]
+        X_neg_mb = sample_negatives(X_mb, n_e)
+
+        X_train_mb = np.hstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
         # Training step
@@ -112,18 +112,26 @@ for epoch in range(n_epoch):
 
         end = time()
 
+        # Training logs
         if it % print_every == 0:
-            # Test on validation
-            y_pred_val = model.predict(X_all_val)
-
             if args.model != 'transe':
-                # Metrics
-                train_acc = accuracy(model.predict(X_train_mb), y_true_mb)
-                val_acc = accuracy(y_pred_val, y_true_val)
-                val_auc = auc(y_pred_val, y_true_val)
+                # Training accuracy
+                pred = model.predict(X_train_mb)
+                train_acc = accuracy(pred, y_true_mb)
 
-                print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; val_acc: {:.4f}; val_auc: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], train_acc, val_acc, val_auc, end-start))
+                # Per class training accuracy
+                pos_acc = accuracy(pred[:m], np.ones([m, 1]))
+                neg_acc = accuracy(pred[m:], np.zeros([m, 1]))
+
+                # Validation accuracy
+                y_pred_val = model.predict(X_val)
+                val_acc = accuracy(y_pred_val, np.ones([M_val, 1]))
+
+                # Validation loss
+                val_loss = model.loss(model.forward(X_all_val), y_true_val).data[0]
+
+                print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss, end-start))
             else:
                 # For TransE, just show energy/loss
                 print('Iter-{}; loss: {:.4f}; time per batch: {:.2f}s'

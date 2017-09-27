@@ -204,7 +204,7 @@ class ERLMLP(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
+        return F.binary_cross_entropy(y_pred, y_true)
 
 
 @inherit_docstrings
@@ -244,7 +244,7 @@ class RESCAL(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k**2)
 
-        self.embeddings = [self.emb_E]
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r1 = 6/np.sqrt(k)
@@ -280,7 +280,7 @@ class RESCAL(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
+        return F.binary_cross_entropy(y_pred, y_true)
 
 
 @inherit_docstrings
@@ -319,7 +319,7 @@ class DistMult(Model):
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
 
-        self.embeddings = [self.emb_E]
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -363,7 +363,7 @@ class ERMLP(Model):
     ---------------------------
     """
 
-    def __init__(self, n_e, n_r, k, h_dim):
+    def __init__(self, n_e, n_r, k, h_dim, p):
         """
         ER-MLP: Entity-Relation MLP
         ---------------------------
@@ -381,6 +381,9 @@ class ERMLP(Model):
 
             h_dim: int
                 Size of hidden layer.
+
+            p: float
+                Dropout rate.
         """
         super(ERMLP, self).__init__()
 
@@ -389,21 +392,24 @@ class ERMLP(Model):
         self.n_r = n_r
         self.k = k
         self.h_dim = h_dim
+        self.p = p
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_L = nn.Embedding(self.n_r, self.k)
 
         self.mlp = nn.Sequential(
+            nn.BatchNorm1d(3*k),
+            nn.Dropout(p=self.p),
             nn.Linear(3*k, h_dim),
-            nn.BatchNorm1d(h_dim),
             nn.ReLU(),
-            nn.Dropout(p=0.5),
+            nn.BatchNorm1d(h_dim),
+            nn.Dropout(p=self.p),
             nn.Linear(h_dim, 1),
             nn.Sigmoid()
         )
 
-        self.embeddings = [self.emb_E]
+        self.embeddings = [self.emb_E, self.emb_L]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
@@ -414,6 +420,12 @@ class ERMLP(Model):
         # Normalize rel embeddings
         self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+
+        # Xavier init
+        for p in self.mlp.modules():
+            if isinstance(p, nn.Linear):
+                in_dim = p.weight.size(0)
+                p.weight.data.normal_(0, 1/np.sqrt(in_dim/2))
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
@@ -436,7 +448,7 @@ class ERMLP(Model):
 
     def loss(self, y_pred, y_true):
         y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-        return F.binary_cross_entropy(y_pred, y_true, size_average=False)
+        return F.binary_cross_entropy(y_pred, y_true)
 
 
 @inherit_docstrings

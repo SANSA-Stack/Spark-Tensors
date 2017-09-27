@@ -191,13 +191,18 @@ def get_minibatches(X, mb_size, shuffle=True):
             // do something with X_mb, the minibatch
     """
     minibatches = []
-    X = X.T
+    X_shuff = X.T
 
     if shuffle:
-        X = skshuffle(X)
+        X_shuff = skshuffle(X_shuff)
 
-    for i in range(0, X.shape[0], mb_size):
-        yield X[i:i + mb_size].T
+    for i in range(0, X_shuff.shape[0], mb_size):
+        yield X_shuff[i:i + mb_size].T
+
+
+def get_random_minibatch(X, mb_size):
+    idxs = np.random.choice(np.arange(X.shape[1]), size=mb_size, replace=False)
+    return X[:, idxs]
 
 
 def inherit_docstrings(cls):

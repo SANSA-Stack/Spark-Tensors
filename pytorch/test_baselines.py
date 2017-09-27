@@ -4,6 +4,7 @@ from kga.util import *
 import numpy as np
 import torch.optim
 import argparse
+from pprint import pprint
 
 
 parser = argparse.ArgumentParser(
@@ -18,6 +19,8 @@ parser.add_argument('--k', type=int, default=50, metavar='',
                     help='embedding dim (default: 50)')
 parser.add_argument('--h', type=int, default=100, metavar='',
                     help='size of ER-MLP hidden layer (default: 100)')
+parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
+                    help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--gamma', type=float, default=1, metavar='',
                     help='TransE loss margin (default: 1)')
 
@@ -42,7 +45,7 @@ n_r = infos[args.dataset]['n_r']
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h),
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h, p=args.dropout_p),
     'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma)
 }
 
@@ -54,9 +57,14 @@ M_test = X_test.shape[1]
 
 X_neg_test = sample_negatives(X_test, n_e=n_e)
 X_all_test = np.hstack([X_test, X_neg_test])
-y_true = np.vstack([np.ones([M_test, 1]), np.zeros([M_test, 1])])
+
+y_true_pos = np.ones([M_test, 1])
+y_true_neg = np.zeros([M_test, 1])
+y_true = np.vstack([y_true_pos, y_true_neg])
 
 # Test and show metrics
+y_pred_pos = model.predict(X_test)
+y_pred_neg = model.predict(X_neg_test)
 y_pred = model.predict(X_all_test)
 
 print()
@@ -64,8 +72,10 @@ print('Test result for: {}'.format(args.model))
 print('-----------------------------')
 
 if args.model != 'transe':
-    print('Accuracy: {}'.format(accuracy(y_pred, y_true)))
-    print('AUC: {}'.format(auc(y_pred, y_true)))
+    print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_true)))
+    print('Accuracy pos: {:.4f}'.format(accuracy(y_pred_pos, y_true_pos)))
+    print('Accuracy neg: {:.4f}'.format(accuracy(y_pred_neg, y_true_neg)))
+    print('AUC: {:.4f}'.format(auc(y_pred, y_true)))
 else:
     print('MRR: {}, Hits@2: {}'.format(
         *eval_embeddings(model, X_test, n_e, k=args.k, mode='asc'))
@@ -78,25 +88,8 @@ idx2ent = np.load('data/{}/bin/idx2ent.npy'.format(args.dataset))
 idx2rel = np.load('data/{}/bin/idx2rel.npy'.format(args.dataset))
 
 print()
-print('Entities nearest neighbours:')
-print('----------------------------')
-
-e_nn = entity_nn(model, n=nn_n, k=nn_k)
-
-for nn in e_nn:
-    print('{}: '.format(idx2ent[nn[0]]), end='')
-    for e in nn[1:]:
-        print('{}, '.format(idx2ent[e]), end='')
-    print('\n')
-
-print()
 print('Relations nearest neighbours:')
 print('----------------------------')
 
-r_nn = relation_nn(model, n=nn_n, k=nn_k)
-
-for nn in r_nn:
-    print('{}: '.format(idx2rel[nn[0]]), end='')
-    for r in nn[1:]:
-        print('{}, '.format(idx2rel[r]), end='')
-    print('\n')
+r_nn = relation_nn(model, n=nn_n, k=nn_k, idx2rel=idx2rel)
+pprint(r_nn)

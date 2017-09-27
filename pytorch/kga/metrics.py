@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.spatial.distance
 from sklearn.metrics import roc_auc_score
+from collections import defaultdict
 
 
 def accuracy(y_pred, y_true):
@@ -127,7 +128,7 @@ def entity_nn(model, n=10, k=5):
     return np.argsort(mat, axis=1)[idxs, :10]
 
 
-def relation_nn(model, n=10, k=5):
+def relation_nn(model, n=10, k=5, idx2rel=None):
     """
     Compute nearest neighbours of all relations embeddings of a model.
 
@@ -140,8 +141,25 @@ def relation_nn(model, n=10, k=5):
 
     k: int, default: 5
         Number of nearest neighbours.
+
+    idx2rel: dict, default: None
+        Lookup dictionary to translate relation indices. If this is None, then
+        output the indices matrix instead.
     """
     emb = model.emb_L.weight.data.numpy()
     mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
     idxs = np.random.randint(emb.shape[0], size=n)
-    return np.argsort(mat, axis=1)[idxs, :10]
+    nn = np.argsort(mat, axis=1)[idxs, :k]
+
+    if idx2rel is None:
+        return nn
+
+    nn_dict = defaultdict(dict)
+
+    for i in nn:
+        for j in i:
+            k = idx2rel[i[0]]
+            l = idx2rel[j]
+            nn_dict[k][l] = mat[i[0], j]
+
+    return nn_dict
