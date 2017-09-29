@@ -99,6 +99,9 @@ def load_data(file_path):
         Contains the triplets from dataset. The entities and relations are
         translated to its unique indices.
 
+    y: [Only if the dataset contains this information] binary np.array of Mx1
+        Class label of each M data.
+
     n_e: int
         Total number of unique entities in the dataset.
 
@@ -135,7 +138,12 @@ def load_data(file_path):
         X[1, i] = rel2idx[row[1]]
         X[2, i] = ent2idx[row[2]]
 
-    return X, n_e, n_r, idx2ent, idx2rel
+    # Check if labels exists
+    if df.shape[1] >= 4:
+        y = df[3].values
+        return X, y, n_e, n_r, idx2ent, idx2rel
+    else:
+        return X, n_e, n_r, idx2ent, idx2rel
 
 
 def load_data_bin(file_path):

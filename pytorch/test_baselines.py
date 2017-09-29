@@ -4,6 +4,7 @@ from kga.util import *
 import numpy as np
 import torch.optim
 import argparse
+from sklearn.metrics import classification_report
 from pprint import pprint
 
 
@@ -28,16 +29,17 @@ args = parser.parse_args()
 
 infos = {
     'wordnet': {
-        'n_e': 40943,
-        'n_r': 18
+        'n_e': 38194,
+        'n_r': 11
     },
     'fb15k': {
-        'n_e': 14951,
-        'n_r': 1345
+        'n_e': 75043,
+        'n_r': 13
     },
 }
 
-X_test, _, _ = load_data_bin('data/{}/bin/test.npy'.format(args.dataset))
+X_test, _, _ = load_data_bin('data/NTN/{}/bin/test.npy'.format(args.dataset))
+y_test = np.load('data/NTN/{}/bin/y_test.npy'.format(args.dataset))
 
 n_e = infos[args.dataset]['n_e']
 n_r = infos[args.dataset]['n_r']
@@ -52,30 +54,17 @@ models = {
 model = models[args.model]
 model.load_state_dict(torch.load('models/{}/{}.bin'.format(args.dataset, args.model)))
 
-# Negative sampling
-M_test = X_test.shape[1]
-
-X_neg_test = sample_negatives(X_test, n_e=n_e)
-X_all_test = np.hstack([X_test, X_neg_test])
-
-y_true_pos = np.ones([M_test, 1])
-y_true_neg = np.zeros([M_test, 1])
-y_true = np.vstack([y_true_pos, y_true_neg])
-
 # Test and show metrics
-y_pred_pos = model.predict(X_test)
-y_pred_neg = model.predict(X_neg_test)
-y_pred = model.predict(X_all_test)
+y_pred = model.predict(X_test)
 
 print()
 print('Test result for: {}'.format(args.model))
 print('-----------------------------')
 
 if args.model != 'transe':
-    print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_true)))
-    print('Accuracy pos: {:.4f}'.format(accuracy(y_pred_pos, y_true_pos)))
-    print('Accuracy neg: {:.4f}'.format(accuracy(y_pred_neg, y_true_neg)))
-    print('AUC: {:.4f}'.format(auc(y_pred, y_true)))
+    print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_test)))
+    print('AUC: {:.4f}'.format(auc(y_pred, y_test)))
+    print(classification_report(y_test, (y_pred > 0.5)))
 else:
     print('MRR: {}, Hits@2: {}'.format(
         *eval_embeddings(model, X_test, n_e, k=args.k, mode='asc'))
@@ -84,12 +73,20 @@ else:
 nn_n = 10
 nn_k = 5
 
-idx2ent = np.load('data/{}/bin/idx2ent.npy'.format(args.dataset))
-idx2rel = np.load('data/{}/bin/idx2rel.npy'.format(args.dataset))
+idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
+idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
+
+# print()
+# print('Entities nearest neighbours:')
+# print('----------------------------')
+
+# e_nn = entity_nn(model, n=10, k=nn_k, idx2ent=idx2entac
+# )
+# pprint(e_nn)
 
 print()
 print('Relations nearest neighbours:')
 print('----------------------------')
 
-r_nn = relation_nn(model, n=nn_n, k=nn_k, idx2rel=idx2rel)
+r_nn = relation_nn(model, n=n_r, k=nn_k, idx2rel=idx2rel)
 pprint(r_nn)

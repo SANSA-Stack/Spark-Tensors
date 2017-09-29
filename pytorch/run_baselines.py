@@ -32,6 +32,8 @@ parser.add_argument('--mbsize', type=int, default=100, metavar='',
                     help='size of minibatch (default: 100)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
+parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
+                    help='decaying learning rate every n epoch (default: 10)')
 parser.add_argument('--log_interval', type=int, default=100, metavar='',
                     help='interval between training status logs (default: 100)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
@@ -43,8 +45,9 @@ args = parser.parse_args()
 
 
 # Load dataset
-X_train, n_e, n_r = load_data_bin('data/{}/bin/train.npy'.format(args.dataset))
-X_val, _, _ = load_data_bin('data/{}/bin/val.npy'.format(args.dataset))
+X_train, n_e, n_r = load_data_bin('data/NTN/{}/bin/train.npy'.format(args.dataset))
+X_val, _, _ = load_data_bin('data/NTN/{}/bin/val.npy'.format(args.dataset))
+y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
 
 M_train = X_train.shape[1]
 M_val = X_val.shape[1]
@@ -76,29 +79,28 @@ checkpoint_path = '{}/{}.bin'.format(checkpoint_dir, args.model)
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
-# Load up validation set
-X_neg_val = np.load('data/{}/bin/val_neg.npy'.format(args.dataset))
-idxs = np.random.choice(np.arange(X_neg_val.shape[1]), size=M_val, replace=False)
-X_neg_val = X_neg_val[:, idxs]
-X_all_val = np.hstack([X_val, X_neg_val])
-y_true_val = np.vstack([np.ones([M_val, 1]), np.zeros([M_val, 1])])
-
 
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
     print('----------------')
 
-    mb_iter = get_minibatches(X_train, mb_size)
+    mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
+    mb_neg_iter = get_minibatches(
+        sample_negatives(X_train, n_e), mb_size, shuffle=True
+    )
     it = 0
 
-    for X_mb in mb_iter:
+    # Anneal learning rate
+    lr = args.lr * (0.1 ** (epoch // args.lr_decay_every))
+    for param_group in solver.param_groups:
+        param_group['lr'] = lr
+
+    for X_mb, X_neg_mb in zip(mb_iter, mb_neg_iter):
         start = time()
 
         # Build batch with negative sampling and literals
         m = X_mb.shape[1]
-        X_neg_mb = sample_negatives(X_mb, n_e)
-
         X_train_mb = np.hstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
@@ -124,11 +126,11 @@ for epoch in range(n_epoch):
                 neg_acc = accuracy(pred[m:], np.zeros([m, 1]))
 
                 # Validation accuracy
-                y_pred_val = model.predict(X_val)
-                val_acc = accuracy(y_pred_val, np.ones([M_val, 1]))
+                y_pred_val = model.forward(X_val)
+                val_acc = accuracy(y_pred_val.data.numpy(), y_val)
 
                 # Validation loss
-                val_loss = model.loss(model.forward(X_all_val), y_true_val).data[0]
+                val_loss = model.loss(y_pred_val, y_val).data[0]
 
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss, end-start))
