@@ -108,7 +108,7 @@ def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
     return mrr, hitsk
 
 
-def entity_nn(model, n=10, k=5):
+def entity_nn(model, n=10, k=5, idx2ent=None):
     """
     Compute nearest neighbours of all entities embeddings of a model.
 
@@ -121,11 +121,28 @@ def entity_nn(model, n=10, k=5):
 
     k: int, default: 5
         Number of nearest neighbours.
+
+    idx2ent: dict, default: None
+        Lookup dictionary to translate entity indices. If this is None, then
+        output the indices matrix instead.
     """
     emb = model.emb_E.weight.data.numpy()
     mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
     idxs = np.random.randint(emb.shape[0], size=n)
-    return np.argsort(mat, axis=1)[idxs, :10]
+    nn = np.argsort(mat, axis=1)[idxs, :k]
+
+    if idx2ent is None:
+        return nn
+
+    nn_dict = defaultdict(dict)
+
+    for i in nn:
+        for j in i:
+            k = idx2ent[i[0]]
+            l = idx2ent[j]
+            nn_dict[k][l] = mat[i[0], j]
+
+    return dict(nn_dict)
 
 
 def relation_nn(model, n=10, k=5, idx2rel=None):
@@ -162,4 +179,4 @@ def relation_nn(model, n=10, k=5, idx2rel=None):
             l = idx2rel[j]
             nn_dict[k][l] = mat[i[0], j]
 
-    return nn_dict
+    return dict(nn_dict)
