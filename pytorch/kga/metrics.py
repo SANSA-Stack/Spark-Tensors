@@ -126,21 +126,24 @@ def entity_nn(model, n=10, k=5, idx2ent=None):
         Lookup dictionary to translate entity indices. If this is None, then
         output the indices matrix instead.
     """
-    emb = model.emb_E.weight.data.numpy()
-    mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
+    emb = model.emb_E.weight.data.numpy()  # m x k
+
     idxs = np.random.randint(emb.shape[0], size=n)
-    nn = np.argsort(mat, axis=1)[idxs, :k]
+    res = emb[idxs, :]  # n x k
+
+    mat = scipy.spatial.distance.cdist(res, emb, metric='euclidean')  # n x m
+    nn = np.argsort(mat, axis=1)[:, :k]  # gather k-bests indexes
 
     if idx2ent is None:
         return nn
 
     nn_dict = defaultdict(dict)
 
-    for i in nn:
-        for j in i:
-            k = idx2ent[i[0]]
+    for i, e in enumerate(idxs):
+        for j in nn[i]:
+            k = idx2ent[e]
             l = idx2ent[j]
-            nn_dict[k][l] = mat[i[0], j]
+            nn_dict[k][l] = mat[i, j]
 
     return dict(nn_dict)
 
@@ -163,20 +166,23 @@ def relation_nn(model, n=10, k=5, idx2rel=None):
         Lookup dictionary to translate relation indices. If this is None, then
         output the indices matrix instead.
     """
-    emb = model.emb_L.weight.data.numpy()
-    mat = scipy.spatial.distance.cdist(emb, emb, metric='euclidean')
+    emb = model.emb_L.weight.data.numpy()  # m x k
+
     idxs = np.random.randint(emb.shape[0], size=n)
-    nn = np.argsort(mat, axis=1)[idxs, :k]
+    res = emb[idxs, :]  # n x k
+
+    mat = scipy.spatial.distance.cdist(res, emb, metric='euclidean')  # n x m
+    nn = np.argsort(mat, axis=1)[:, :k]  # gather k-bests indexes
 
     if idx2rel is None:
         return nn
 
     nn_dict = defaultdict(dict)
 
-    for i in nn:
-        for j in i:
-            k = idx2rel[i[0]]
+    for i, e in enumerate(idxs):
+        for j in nn[i]:
+            k = idx2rel[e]
             l = idx2rel[j]
-            nn_dict[k][l] = mat[i[0], j]
+            nn_dict[k][l] = mat[i, j]
 
     return dict(nn_dict)

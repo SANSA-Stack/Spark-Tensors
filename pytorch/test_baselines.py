@@ -76,13 +76,12 @@ nn_k = 5
 idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
 idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
 
-# print()
-# print('Entities nearest neighbours:')
-# print('----------------------------')
+print()
+print('Entities nearest neighbours:')
+print('----------------------------')
 
-# e_nn = entity_nn(model, n=10, k=nn_k, idx2ent=idx2entac
-# )
-# pprint(e_nn)
+e_nn = entity_nn(model, n=nn_n, k=nn_k, idx2ent=idx2ent)
+pprint(e_nn)
 
 print()
 print('Relations nearest neighbours:')
