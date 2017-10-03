@@ -2,6 +2,7 @@ import numpy as np
 import scipy.spatial.distance
 from sklearn.metrics import roc_auc_score
 from collections import defaultdict
+import scipy.stats as st
 
 
 def accuracy(y_pred, y_true):
@@ -35,7 +36,7 @@ def auc(y_pred, y_true):
     return roc_auc_score(y_true, y_pred)
 
 
-def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
+def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -55,12 +56,10 @@ def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
     k: int
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
-    entity: string {'head', 'tail'}, default 'head'
-        Entity to be corrupted during evaluation.
+    n_sample: int, default: 100
+        Number of negative entities to be considered. These n_sample negative
+        samples are randomly picked w/o replacement from [0, n_e).
 
-    mode: string {'asc', 'desc'}, default 'desc'
-        Whether to sort the score ascending (e.g. energy, distance) or
-        descending (e.g. probability, score).
 
     Returns:
     --------
@@ -70,40 +69,39 @@ def eval_embeddings(model, X_test, n_e, k, entity='head', mode='desc'):
     hitsk: float
         Hits@k.
     """
-    # Validate arguments
-    if entity not in ('head', 'tail') or mode not in ('asc', 'desc'):
-        raise ValueError('entity should be either "head" or "tail", '
-                         'mode should be either "asc" or "desc"')
-
     M = X_test.shape[1]
-    N = int(M/2)
 
-    X_test_ori = np.copy(X_test[:, :N]).T
-    scores = np.zeros([N, n_e])
-    idx = 0 if entity == 'head' else 2  # Index of changed entity
+    X_corr_h = np.copy(X_test)
+    X_corr_t = np.copy(X_test)
 
-    # Gather scores for all entities
-    for e in range(n_e):
-        X_test[idx, :] = e
-        y = model.predict(X_test)
-        scores[:, e] = y.ravel()
+    scores_h = np.zeros([M, n_sample+1])
+    scores_t = np.zeros([M, n_sample+1])
 
-    # Sort scores in ascending order
-    sorted_scores = np.argsort(scores)
+    # Gather scores for correct entities
+    y = model.predict(X_test).ravel()  # M
+    scores_h[:, 0] = y
+    scores_t[:, 0] = y
 
-    if mode == 'desc':
-        # Reverse ordering if descending
-        sorted_scores = sorted_scores[:, ::-1]
+    # Gather scores for some random negative entities
+    rand_ents = np.random.choice(np.arange(n_e), size=n_sample, replace=False)
 
-    # Compute ranks of original entities
-    ranks = np.argmax(sorted_scores == X_test_ori[:, idx][:, None], axis=1)
-    ranks += 1  # Convert to 1-indexed list
+    for i, e in enumerate(rand_ents):
+        idx = i+1  # as i == 0 is for correct triplet score
 
-    # Compute mean reciprocal rank
-    mrr = np.mean(1/ranks)
+        X_corr_h[0, :] = e
+        X_corr_t[2, :] = e
 
-    # Compute hits@k
-    hitsk = np.mean(ranks <= k)
+        y_h = model.predict(X_corr_h).ravel()
+        y_t = model.predict(X_corr_t).ravel()
+
+        scores_h[:, idx] = y_h
+        scores_t[:, idx] = y_t
+
+    ranks_h = np.array([st.rankdata(s)[0] for s in scores_h])
+    ranks_t = np.array([st.rankdata(s)[0] for s in scores_t])
+
+    mrr = (np.mean(1/ranks_h) + np.mean(1/ranks_t)) / 2
+    hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
 
     return mrr, hitsk
 
@@ -166,7 +164,7 @@ def relation_nn(model, n=10, k=5, idx2rel=None):
         Lookup dictionary to translate relation indices. If this is None, then
         output the indices matrix instead.
     """
-    emb = model.emb_L.weight.data.numpy()  # m x k
+    emb = model.emb_R.weight.data.numpy()  # m x k
 
     idxs = np.random.randint(emb.shape[0], size=n)
     res = emb[idxs, :]  # n x k

@@ -24,6 +24,12 @@ parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
                     help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--gamma', type=float, default=1, metavar='',
                     help='TransE loss margin (default: 1)')
+parser.add_argument('--hit_k', type=int, default=10, metavar='',
+                    help='hit@k metrics (default: 10)')
+parser.add_argument('--nn_n', type=int, default=5, metavar='',
+                    help='number of entities/relations for nearest neighbours (default: 5)')
+parser.add_argument('--nn_k', type=int, default=5, metavar='',
+                    help='k in k-nearest-neighbours (default: 5)')
 
 args = parser.parse_args()
 
@@ -54,24 +60,31 @@ models = {
 model = models[args.model]
 model.load_state_dict(torch.load('models/{}/{}.bin'.format(args.dataset, args.model)))
 
-# Test and show metrics
-y_pred = model.predict(X_test)
+
+# Evaluation metrics, e.g. acc, auc, mrr, hits@k
+# ----------------------------------------------
 
 print()
 print('Test result for: {}'.format(args.model))
 print('-----------------------------')
 
 if args.model != 'transe':
+    y_pred = model.predict(X_test)
+
     print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_test)))
     print('AUC: {:.4f}'.format(auc(y_pred, y_test)))
     print(classification_report(y_test, (y_pred > 0.5)))
 else:
-    print('MRR: {}, Hits@2: {}'.format(
-        *eval_embeddings(model, X_test, n_e, k=args.k, mode='asc'))
-    )
+    X_pos = X_test[:, y_test.ravel() == 1]
+    X_pos = X_pos[:, :100]
 
-nn_n = 10
-nn_k = 5
+    mrr, hitsk = eval_embeddings(model, X_pos, n_e, k=args.hit_k)
+
+    print('MRR: {:.4f}, Hits@{}: {:.4f}'.format(mrr, args.hit_k, hitsk))
+
+
+# Nearest-neighbours
+# ------------------
 
 idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
 idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
@@ -80,12 +93,12 @@ print()
 print('Entities nearest neighbours:')
 print('----------------------------')
 
-e_nn = entity_nn(model, n=nn_n, k=nn_k, idx2ent=idx2ent)
+e_nn = entity_nn(model, n=args.nn_n, k=args.nn_k, idx2ent=idx2ent)
 pprint(e_nn)
 
 print()
 print('Relations nearest neighbours:')
 print('----------------------------')
 
-r_nn = relation_nn(model, n=n_r, k=nn_k, idx2rel=idx2rel)
+r_nn = relation_nn(model, n=args.nn_n, k=args.nn_k, idx2rel=idx2rel)
 pprint(r_nn)

@@ -24,6 +24,8 @@ python run_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {wordne
 See `python run_baselines.py --help` for further options, e.g. hyperparameters.
 
 ### Testing
+**Note:** All hyperparameters of the model _must_ match those used during training.
+
 ```
 python test_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {wordnet,fb15k}
 ```
