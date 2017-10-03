@@ -51,6 +51,8 @@ X_train, n_e, n_r = load_data_bin('data/NTN/{}/bin/train.npy'.format(args.datase
 X_val, _, _ = load_data_bin('data/NTN/{}/bin/val.npy'.format(args.dataset))
 y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
 
+X_val_pos = X_val[:, y_val.ravel() == 1]  # Take only positive samples
+
 M_train = X_train.shape[1]
 M_val = X_val.shape[1]
 
@@ -139,9 +141,11 @@ for epoch in range(n_epoch):
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss, end-start))
             else:
-                # For TransE, just show energy/loss
-                print('Iter-{}; loss: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], end-start))
+                mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10)
+
+                # For TransE, show loss, mrr & hits@10
+                print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], mrr, hits10, end-start))
 
         it += 1
 
