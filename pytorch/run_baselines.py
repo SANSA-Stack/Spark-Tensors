@@ -28,6 +28,8 @@ parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
                     help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--h', type=int, default=100, metavar='',
                     help='size of ER-MLP hidden layer (default: 100)')
+parser.add_argument('--transe_metric', default='l2', metavar='',
+                    help='whether to use `l1` or `l2` metric for TransE (default: l2)')
 parser.add_argument('--mbsize', type=int, default=100, metavar='',
                     help='size of minibatch (default: 100)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
@@ -57,7 +59,7 @@ models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
     'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h, p=args.dropout_p),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma)
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma, d=args.transe_metric)
 }
 
 model = models[args.model]

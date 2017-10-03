@@ -120,7 +120,7 @@ class ERLMLP(Model):
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_L = nn.Embedding(self.n_r, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
         self.fc_literal = nn.Linear(self.n_a, self.l)
         self.fc1 = nn.Linear(3*k+l, h_dim)
         self.fc2 = nn.Linear(h_dim, 1)
@@ -131,11 +131,11 @@ class ERLMLP(Model):
         r = 6/np.sqrt(k)
 
         self.emb_E.weight.data.uniform_(-r, r)
-        self.emb_L.weight.data.uniform_(-r, r)
+        self.emb_R.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-        self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+        self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X, X_lit):
         """
@@ -168,7 +168,7 @@ class ERLMLP(Model):
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        e_ls = self.emb_L(ls)
+        e_ls = self.emb_R(ls)
 
         # Project literals to lower dimension subspace
         e_as = self.fc_literal(X_lit)
@@ -242,20 +242,20 @@ class RESCAL(Model):
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_L = nn.Embedding(self.n_r, self.k**2)
+        self.emb_R = nn.Embedding(self.n_r, self.k**2)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E, self.emb_R]
 
         # Initialize embeddings
         r1 = 6/np.sqrt(k)
         r2 = 6/k
 
         self.emb_E.weight.data.uniform_(-r1, r1)
-        self.emb_L.weight.data.uniform_(-r2, r2)
+        self.emb_R.weight.data.uniform_(-r2, r2)
 
         # Normalize rel embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-        self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+        self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
@@ -266,14 +266,16 @@ class RESCAL(Model):
         ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
-        e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
-        W = self.emb_L(ls)  # M x k^2, as W is bilinear weight
+        e_hs = self.emb_E(hs).view(-1, self.k, 1)
+        e_ts = self.emb_E(ts).view(-1, self.k, 1)
+        W = self.emb_R(ls).view(-1, self.k, self.k)  # M x k x k
 
         # Forward
-        phi = op.kron(e_hs, e_ts)  # Take Kronecker product of two entities
-        f = torch.sum(phi * W, 1)  # Take dot product of each row
-        y_prob = F.sigmoid(f)
+        out = torch.bmm(torch.transpose(e_hs, 1, 2), W)  # h^T W
+        out = torch.bmm(out, e_ts)  # (h^T W) h
+        out = out.view(-1, 1)  # [-1, 1, 1] -> [-1, 1]
+
+        y_prob = F.sigmoid(out)
         y_prob = y_prob.view(-1, 1)  # Reshape to Mx1
 
         return y_prob
@@ -317,19 +319,19 @@ class DistMult(Model):
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_L = nn.Embedding(self.n_r, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E, self.emb_R]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
 
         self.emb_E.weight.data.uniform_(-r, r)
-        self.emb_L.weight.data.uniform_(-r, r)
+        self.emb_R.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-        self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+        self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
@@ -342,7 +344,7 @@ class DistMult(Model):
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        W = self.emb_L(ls)
+        W = self.emb_R(ls)
 
         # Forward
         f = torch.sum(e_hs * W * e_ts, 1)
@@ -396,7 +398,7 @@ class ERMLP(Model):
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_L = nn.Embedding(self.n_r, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
 
         self.mlp = nn.Sequential(
             nn.BatchNorm1d(3*k),
@@ -409,16 +411,16 @@ class ERMLP(Model):
             nn.Sigmoid()
         )
 
-        self.embeddings = [self.emb_E, self.emb_L]
+        self.embeddings = [self.emb_E, self.emb_R]
 
         # Initialize embeddings
         r = 6/np.sqrt(k)
 
         self.emb_E.weight.data.uniform_(-r, r)
-        self.emb_L.weight.data.uniform_(-r, r)
+        self.emb_R.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
-        self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+        self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
         # Xavier init
@@ -438,7 +440,7 @@ class ERMLP(Model):
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        e_ls = self.emb_L(ls)
+        e_ls = self.emb_R(ls)
 
         # Forward
         phi = torch.cat([e_hs, e_ts, e_ls], 1)  # M x 3k
@@ -493,7 +495,7 @@ class TransE(Model):
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_L = nn.Embedding(self.n_r, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
 
         self.embeddings = [self.emb_E]
 
@@ -501,11 +503,11 @@ class TransE(Model):
         r = 6/np.sqrt(k)
 
         self.emb_E.weight.data.uniform_(-r, r)
-        self.emb_L.weight.data.uniform_(-r, r)
+        self.emb_R.weight.data.uniform_(-r, r)
 
         # Normalize rel embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
-        self.emb_L.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+        self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
     def forward(self, X):
         """
@@ -543,7 +545,7 @@ class TransE(Model):
 
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        e_ls = self.emb_L(ls)
+        e_ls = self.emb_R(ls)
         e_hcs = self.emb_E(hcs)
         e_tcs = self.emb_E(tcs)
 
