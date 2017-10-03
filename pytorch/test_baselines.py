@@ -18,12 +18,14 @@ parser.add_argument('--dataset', default='wordnet', metavar='',
                     help='dataset to be used: {wordnet, fb15k} (default: wordnet)')
 parser.add_argument('--k', type=int, default=50, metavar='',
                     help='embedding dim (default: 50)')
-parser.add_argument('--h', type=int, default=100, metavar='',
-                    help='size of ER-MLP hidden layer (default: 100)')
-parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
-                    help='Probability of dropping out neuron in dropout (default: 0.5)')
-parser.add_argument('--gamma', type=float, default=1, metavar='',
+parser.add_argument('--transe_gamma', type=float, default=1, metavar='',
                     help='TransE loss margin (default: 1)')
+parser.add_argument('--transe_metric', default='l2', metavar='',
+                    help='whether to use `l1` or `l2` metric for TransE (default: l2)')
+parser.add_argument('--mlp_h', type=int, default=100, metavar='',
+                    help='size of ER-MLP hidden layer (default: 100)')
+parser.add_argument('--mlp_dropout_p', type=float, default=0.5, metavar='',
+                    help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--hit_k', type=int, default=10, metavar='',
                     help='hit@k metrics (default: 10)')
 parser.add_argument('--nn_n', type=int, default=5, metavar='',
@@ -53,8 +55,8 @@ n_r = infos[args.dataset]['n_r']
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h, p=args.dropout_p),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma)
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p),
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric)
 }
 
 model = models[args.model]

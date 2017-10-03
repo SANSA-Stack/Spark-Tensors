@@ -18,24 +18,24 @@ parser.add_argument('--dataset', default='wordnet', metavar='',
                     help='dataset to be used: {wordnet, fb15k} (default: wordnet)')
 parser.add_argument('--k', type=int, default=50, metavar='',
                     help='embedding dim (default: 50)')
-parser.add_argument('--gamma', type=float, default=1, metavar='',
+parser.add_argument('--transe_gamma', type=float, default=1, metavar='',
                     help='TransE loss margin (default: 1)')
-parser.add_argument('--lr', type=float, default=0.1, metavar='',
-                    help='learning rate (default: 0.1)')
-parser.add_argument('--decay', type=float, default=1e-4, metavar='',
-                    help='L2 weight decay (default: 1e-4)')
-parser.add_argument('--dropout_p', type=float, default=0.5, metavar='',
-                    help='Probability of dropping out neuron in dropout (default: 0.5)')
-parser.add_argument('--h', type=int, default=100, metavar='',
-                    help='size of ER-MLP hidden layer (default: 100)')
 parser.add_argument('--transe_metric', default='l2', metavar='',
                     help='whether to use `l1` or `l2` metric for TransE (default: l2)')
+parser.add_argument('--mlp_h', type=int, default=100, metavar='',
+                    help='size of ER-MLP hidden layer (default: 100)')
+parser.add_argument('--mlp_dropout_p', type=float, default=0.5, metavar='',
+                    help='Probability of dropping out neuron in dropout (default: 0.5)')
 parser.add_argument('--mbsize', type=int, default=100, metavar='',
                     help='size of minibatch (default: 100)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
+parser.add_argument('--lr', type=float, default=0.1, metavar='',
+                    help='learning rate (default: 0.1)')
 parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
                     help='decaying learning rate every n epoch (default: 10)')
+parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
+                    help='L2 weight decay (default: 1e-4)')
 parser.add_argument('--log_interval', type=int, default=100, metavar='',
                     help='interval between training status logs (default: 100)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
@@ -58,8 +58,8 @@ M_val = X_val.shape[1]
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.h, p=args.dropout_p),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.gamma, d=args.transe_metric)
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p),
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric)
 }
 
 model = models[args.model]
@@ -71,7 +71,7 @@ if args.resume:
     )
 
 # Training params
-solver = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.decay)
+solver = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
@@ -87,22 +87,24 @@ for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
     print('----------------')
 
-    mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
-    mb_neg_iter = get_minibatches(
-        sample_negatives(X_train, n_e), mb_size, shuffle=True
-    )
     it = 0
+
+    # Shuffle and chunk data into minibatches
+    mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
 
     # Anneal learning rate
     lr = args.lr * (0.1 ** (epoch // args.lr_decay_every))
     for param_group in solver.param_groups:
         param_group['lr'] = lr
 
-    for X_mb, X_neg_mb in zip(mb_iter, mb_neg_iter):
+    for X_mb in mb_iter:
         start = time()
 
-        # Build batch with negative sampling and literals
+        # Build batch with negative sampling
         m = X_mb.shape[1]
+
+        X_neg_mb = sample_negatives(X_mb, n_e)
+
         X_train_mb = np.hstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
