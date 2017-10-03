@@ -552,42 +552,50 @@ class TransE(Model):
         return e_hs, e_ls, e_ts, e_hcs, e_tcs
 
     def predict(self, X):
-        y = self.forward(X)
-        return self.energy(y).data.numpy()
+        # Decompose X into head, relationship, tail
+        hs, ls, ts = X
+
+        hs = Variable(torch.from_numpy(hs))
+        ls = Variable(torch.from_numpy(ls))
+        ts = Variable(torch.from_numpy(ts))
+
+        e_hs = self.emb_E(hs)
+        e_ls = self.emb_R(ls)
+        e_ts = self.emb_E(ts)
+
+        return self.energy(e_hs, e_ls, e_ts).view(-1, 1).data.numpy()
 
     def loss(self, y, y_true=None):
-        return torch.sum(self.energy(y))
+        h, l, t, hc, tc = y
 
-    def energy(self, y):
+        d_pos = self.energy(h, l, t)
+        d_neg = self.energy(hc, l, tc)
+
+        return torch.sum(F.relu(self.gamma + d_pos - d_neg).view(-1, 1))
+
+    def energy(self, h, l, t):
         """
         Compute TransE energy
 
         Params:
         -------
-        y: tuple of 5 embeddings
-            Contains the embeddings of (order matters!): head, rel, tail,
-            corrupted head, corrupted tail.
+        h: Mxk tensor
+            Contains head embeddings.
+
+        l: Mxk tensor
+            Contains relation embeddings.
+
+        t: Mxk tensor
+            Contains tail embeddings.
 
         Returns:
         --------
         E: Mx1 tensor
-            E = relu(gamma + d1 - d2), where d1 is Lp-norm computed using
-            real triplets and d2 is computed using corrupted triplets.
+            Energy of each triplets, computed by d(h + l, t) for some func d.
         """
-        h, l, t, hc, tc = y
-
         if self.d == 'l1':
-            x_pos = torch.abs(h + l - t)
-            x_neg = torch.abs(hc + l - tc)
+            out = torch.sum(torch.abs(h + l - t), 1)
         else:
-            x_pos = (h + l - t)**2
-            x_neg = (hc + l - tc)**2
+            out = torch.sqrt(torch.sum((h + l - t)**2, 1))
 
-        d_pos = torch.sum(x_pos, 1)
-        d_neg = torch.sum(x_neg, 1)
-
-        if self.d == 'l2':
-            d_pos = torch.sqrt(d_pos)
-            d_neg = torch.sqrt(d_neg)
-
-        return F.relu(self.gamma + d_pos - d_neg).view(-1, 1)
+        return out
