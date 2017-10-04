@@ -51,10 +51,10 @@ X_train, n_e, n_r = load_data_bin('data/NTN/{}/bin/train.npy'.format(args.datase
 X_val, _, _ = load_data_bin('data/NTN/{}/bin/val.npy'.format(args.dataset))
 y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
 
-X_val_pos = X_val[:, y_val.ravel() == 1]  # Take only positive samples
+X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
 
-M_train = X_train.shape[1]
-M_val = X_val.shape[1]
+M_train = X_train.shape[0]
+M_val = X_val.shape[0]
 
 # Initialize model
 models = {
@@ -103,11 +103,11 @@ for epoch in range(n_epoch):
         start = time()
 
         # Build batch with negative sampling
-        m = X_mb.shape[1]
+        m = X_mb.shape[0]
 
         X_neg_mb = sample_negatives(X_mb, n_e)
 
-        X_train_mb = np.hstack([X_mb, X_neg_mb])
+        X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
         # Training step

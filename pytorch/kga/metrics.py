@@ -46,9 +46,8 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     model: kga.Model
         Embedding model to be evaluated.
 
-    X_test: 3 x M matrix, where M is data size
-        Contains M test triplets. First M/2 triplets are positive samples, while
-        the rest M/2 triplets are negative samples.
+    X_test: M x 3 matrix, where M is data size
+        Contains M test triplets.
 
     n_e: int
         Number of entities in dataset.
@@ -69,7 +68,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     hitsk: float
         Hits@k.
     """
-    M = X_test.shape[1]
+    M = X_test.shape[0]
 
     X_corr_h = np.copy(X_test)
     X_corr_t = np.copy(X_test)
@@ -88,8 +87,8 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     for i, e in enumerate(rand_ents):
         idx = i+1  # as i == 0 is for correct triplet score
 
-        X_corr_h[0, :] = e
-        X_corr_t[2, :] = e
+        X_corr_h[:, 0] = e
+        X_corr_t[:, 2] = e
 
         y_h = model.predict(X_corr_h).ravel()
         y_t = model.predict(X_corr_t).ravel()

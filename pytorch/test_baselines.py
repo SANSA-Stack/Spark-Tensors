@@ -78,7 +78,7 @@ if args.model != 'transe':
     print(classification_report(y_test, (y_pred > 0.5)))
 else:
     # Only take positive samples
-    X_pos = X_test[:, y_test.ravel() == 1]
+    X_pos = X_test[y_test.ravel() == 1, :]
     mrr, hitsk = eval_embeddings(model, X_pos, n_e, k=args.hit_k)
 
     print('MRR: {:.4f}, Hits@{}: {:.4f}'.format(mrr, args.hit_k, hitsk))

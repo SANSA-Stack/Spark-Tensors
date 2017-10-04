@@ -24,7 +24,7 @@ class Model(nn.Module):
 
         Params:
         -------
-        X: int matrix of 3 x M, where M is the (mini)batch size
+        X: int matrix of M x 3, where M is the (mini)batch size
             First row contains index of head entities.
             Second row contains index of relationships.
             Third row contains index of tail entities.
@@ -42,7 +42,7 @@ class Model(nn.Module):
 
         Params:
         -------
-        X: int matrix of 3 x M, where M is the (mini)batch size
+        X: int matrix of M x 3, where M is the (mini)batch size
             First row contains index of head entities.
             Second row contains index of relationships.
             Third row contains index of tail entities.
@@ -143,10 +143,10 @@ class ERLMLP(Model):
 
         Params:
         -------
-        X: int matrix of 3 x M, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
+        X: int matrix of M x 3, where M is the (mini)batch size
+            First column contains index of head entities.
+            Second column contains index of relationships.
+            Third column contains index of tail entities.
 
         X_lit: float matrix of M x n_a
             Contains all literals/attributes information of all data in batch.
@@ -158,7 +158,7 @@ class ERLMLP(Model):
             Contains the probs result of each M data.
         """
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
@@ -187,10 +187,10 @@ class ERLMLP(Model):
 
         Params:
         -------
-        X: int matrix of 3 x M, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
+        X: int matrix of M x 3, where M is the (mini)batch size
+            First column contains index of head entities.
+            Second column contains index of relationships.
+            Third column contains index of tail entities.
 
         X_lit: float matrix of M x n_a
             Contains all literals/attributes information of all data in batch.
@@ -259,7 +259,7 @@ class RESCAL(Model):
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
@@ -335,7 +335,7 @@ class DistMult(Model):
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
@@ -363,6 +363,7 @@ class ERMLP(Model):
     """
     ER-MLP: Entity-Relation MLP
     ---------------------------
+    Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
     def __init__(self, n_e, n_r, k, h_dim, p):
@@ -431,7 +432,7 @@ class ERMLP(Model):
 
     def forward(self, X):
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
@@ -516,11 +517,11 @@ class TransE(Model):
 
         Params:
         -------
-        X: int matrix of 3 x M, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
-            First M/2 columns are positive data, the rest are negative samples.
+        X: int matrix of M x 3, where M is the (mini)batch size
+            First column contains index of head entities.
+            Second column contains index of relationships.
+            Third column contains index of tail entities.
+            First M/2 rows are positive data, the rest are negative samples.
 
         Returns:
         --------
@@ -528,14 +529,15 @@ class TransE(Model):
             Contains the embeddings of (order matters!): head, rel, tail,
             corrupted head, corrupted tail.
         """
-        M = X.shape[1]
+        M = X.shape[0]
 
         # Negative sampling
-        X_neg = X[:, int(M/2):]
+        X_pos = X[:int(M/2), :]
+        X_neg = X[int(M/2):, :]
 
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X[:, :int(M/2)]
-        hcs, tcs = X_neg[0], X_neg[2]
+        hs, ls, ts = X_pos[:, 0], X_pos[:, 1], X_pos[:, 2]
+        hcs, tcs = X_neg[:, 0], X_neg[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
@@ -553,7 +555,7 @@ class TransE(Model):
 
     def predict(self, X):
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
         hs = Variable(torch.from_numpy(hs))
         ls = Variable(torch.from_numpy(ls))
