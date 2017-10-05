@@ -35,22 +35,16 @@ parser.add_argument('--nn_k', type=int, default=5, metavar='',
 
 args = parser.parse_args()
 
-infos = {
-    'wordnet': {
-        'n_e': 38194,
-        'n_r': 11
-    },
-    'fb15k': {
-        'n_e': 75043,
-        'n_r': 13
-    },
-}
+# Load dictionary lookups
+idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
+idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
 
-X_test, _, _ = load_data_bin('data/NTN/{}/bin/test.npy'.format(args.dataset))
+n_e = len(idx2ent)
+n_r = len(idx2rel)
+
+# Load test data
+X_test = np.load('data/NTN/{}/bin/test.npy'.format(args.dataset))
 y_test = np.load('data/NTN/{}/bin/y_test.npy'.format(args.dataset))
-
-n_e = infos[args.dataset]['n_e']
-n_r = infos[args.dataset]['n_r']
 
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),

@@ -80,15 +80,48 @@ def sample_negatives2(X, n_e):
     return np.array(X_corr, dtype=int)
 
 
-def load_data(file_path):
+def load_dictionary(file_path):
     """
-    Load raw dataset into tensor of indexes.
+    Load (unique) entity or relation list. To be used as dictionary lookup,
+    translating unique index to the real entity/relation name.
+
+    Params:
+    -------
+    file_path: string
+        Path to the list. Should be a text file with one column, one entity/
+        relation per line.
+
+    Returns:
+    --------
+    idx2name: list
+        List of all entities/relations. Given an entity/relation index `i`, call
+        `idx2name[i]` to get the real entity/relation name.
+    """
+    df = pd.read_csv(file_path, sep='\t', header=None)
+    idx2name = df[0].tolist()
+    return idx2name
+
+
+def load_data(file_path, idx2ent, idx2rel):
+    """
+    Load raw dataset into tensor of indexes. Use this first for the training
+    set, and save the idx2ent and idx2rel as dictionary lookups. When loading
+    the validation and test sets, pass those into this function so that the
+    consistency is preserved.
 
     Params:
     -------
     file_path: string
         Path to the dataset file. The dataset should be CSV with 3 columns
         separated by \t.
+
+    idx2ent: array or list
+        When called with `idx2ent[i]`, then it returns the real name of the
+        i-th entity.
+
+    idx2rel: array or list
+        When called with `idx2rel[i]`, then it returns the real name of the
+        i-th relation.
 
     Returns:
     --------
@@ -98,35 +131,14 @@ def load_data(file_path):
 
     y: [Only if the dataset contains this information] binary np.array of Mx1
         Class label of each M data.
-
-    n_e: int
-        Total number of unique entities in the dataset.
-
-    n_r: int
-        Total number of unique relations in the dataset.
-
-    idx2ent: list
-        Lookup table to recover entity name from its index.
-
-    idx2rel: list
-        Lookup table to recover relation name from its index.
     """
     df = pd.read_csv(file_path, sep='\t', header=None)
 
-    # Get unique entities
-    entities = pd.concat([df[0], df[2]]).unique()
-    # Get unique relations
-    relations = df[1].unique()
-
     M = df.shape[0]  # dataset size
-    n_e = entities.shape[0]  # num of entities
-    n_r = relations.shape[0]  # num of relations
 
-    idx2ent = entities.tolist()
-    idx2rel = relations.tolist()
-
-    ent2idx = {e: idx for idx, e in enumerate(entities)}
-    rel2idx = {r: idx for idx, r in enumerate(relations)}
+    # Invert [idx2rel: idx -> entity] to [rel2idx: entity -> idx]
+    ent2idx = {e: idx for idx, e in enumerate(idx2ent)}
+    rel2idx = {r: idx for idx, r in enumerate(idx2rel)}
 
     X = np.zeros([M, 3], dtype=int)
 
@@ -138,36 +150,9 @@ def load_data(file_path):
     # Check if labels exists
     if df.shape[1] >= 4:
         y = df[3].values
-        return X, y, n_e, n_r, idx2ent, idx2rel
+        return X, y
     else:
-        return X, n_e, n_r, idx2ent, idx2rel
-
-
-def load_data_bin(file_path):
-    """
-    Load processed and pickled dataset into tensor of indexes.
-
-    Params:
-    -------
-    file_path: string
-        Path to the pickled dataset file. The dataset should be .npy file.
-
-    Returns:
-    --------
-    X: np.array of M x 3
-        Contains the triplets from dataset. The entities and relations are
-        translated to its unique indices.
-
-    n_e: int
-        Total number of unique entities in the dataset.
-
-    n_r: int
-        Total number of unique relations in the dataset.
-    """
-    X = np.load(file_path)
-    n_e = max(np.max(X[:, 0]), np.max(X[:, 2])) + 1
-    n_r = np.max(X[:, 1]) + 1
-    return X, int(n_e), int(n_r)
+        return X
 
 
 def get_minibatches(X, mb_size, shuffle=True):
@@ -206,6 +191,23 @@ def get_minibatches(X, mb_size, shuffle=True):
 
 
 def get_random_minibatch(X, mb_size):
+    """
+    Return a single random minibatch of size `mb_size` out of dataset `X`.
+
+    Params:
+    -------
+    X: np.array of M x 3
+        Contains the triplets from dataset. The entities and relations are
+        translated to its unique indices.
+
+    mb_size: int
+        Size of the minibatch.
+
+    Returns:
+    --------
+    X_mb: np.array of mb_size x 3
+        Each rows is a randomly chosen (without replacement) from X.
+    """
     idxs = np.random.choice(np.arange(X.shape[0]), size=mb_size, replace=False)
     return X[idxs, :]
 

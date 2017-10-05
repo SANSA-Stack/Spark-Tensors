@@ -46,9 +46,16 @@ parser.add_argument('--resume', default=False, metavar='',
 args = parser.parse_args()
 
 
+# Load dictionary lookups
+idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
+idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
+
+n_e = len(idx2ent)
+n_r = len(idx2rel)
+
 # Load dataset
-X_train, n_e, n_r = load_data_bin('data/NTN/{}/bin/train.npy'.format(args.dataset))
-X_val, _, _ = load_data_bin('data/NTN/{}/bin/val.npy'.format(args.dataset))
+X_train = np.load('data/NTN/{}/bin/train.npy'.format(args.dataset))
+X_val = np.load('data/NTN/{}/bin/val.npy'.format(args.dataset))
 y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
 
 X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
@@ -116,7 +123,7 @@ for epoch in range(n_epoch):
         loss.backward()
         solver.step()
         solver.zero_grad()
-        model.normalize_embeddings()
+        # model.normalize_embeddings()
 
         end = time()
 
