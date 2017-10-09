@@ -123,7 +123,10 @@ def entity_nn(model, n=10, k=5, idx2ent=None):
         Lookup dictionary to translate entity indices. If this is None, then
         output the indices matrix instead.
     """
-    emb = model.emb_E.weight.data.numpy()  # m x k
+    try:
+        emb = model.emb_E.weight.data.numpy()  # m x k
+    except:
+        emb = model.emb_E.cpu().weight.data.numpy()
 
     idxs = np.random.randint(emb.shape[0], size=n)
     res = emb[idxs, :]  # n x k
@@ -163,7 +166,10 @@ def relation_nn(model, n=10, k=5, idx2rel=None):
         Lookup dictionary to translate relation indices. If this is None, then
         output the indices matrix instead.
     """
-    emb = model.emb_R.weight.data.numpy()  # m x k
+    try:
+        emb = model.emb_R.weight.data.numpy()  # m x k
+    except:
+        emb = model.emb_R.cpu().weight.data.numpy()
 
     idxs = np.random.randint(emb.shape[0], size=n)
     res = emb[idxs, :]  # n x k

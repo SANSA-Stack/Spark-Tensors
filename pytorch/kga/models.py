@@ -14,8 +14,9 @@ class Model(nn.Module):
     Base class of all models
     """
 
-    def __init__(self):
+    def __init__(self, gpu=False):
         super(Model, self).__init__()
+        self.gpu = gpu
         self.embeddings = []
 
     def forward(self, X):
@@ -51,7 +52,10 @@ class Model(nn.Module):
         --------
         y_pred: np.array of Mx1
         """
-        return self.forward(X).data.numpy()
+        if self.gpu:
+            return self.forward(X).cpu().data.numpy()
+        else:
+            return self.forward(X).data.numpy()
 
     def loss(self, X):
         """
@@ -83,7 +87,7 @@ class ERLMLP(Model):
     ------------------------------------
     """
 
-    def __init__(self, n_e, n_r, n_a, k, l, h_dim):
+    def __init__(self, n_e, n_r, n_a, k, l, h_dim, gpu=False):
         """
         ERL-MLP: Entity-Relation-Literal MLP
         ------------------------------------
@@ -107,8 +111,11 @@ class ERLMLP(Model):
 
             h_dim: int
                 Size of hidden layer.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
         """
-        super(ERLMLP, self).__init__()
+        super(ERLMLP, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e
@@ -137,6 +144,10 @@ class ERLMLP(Model):
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
     def forward(self, X, X_lit):
         """
         Given a (mini)batch of triplets X of size M, predict the validity.
@@ -160,10 +171,16 @@ class ERLMLP(Model):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
-        X_lit = Variable(torch.from_numpy(X_lit))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+            X_lit = Variable(torch.from_numpy(X_lit).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
+            X_lit = Variable(torch.from_numpy(X_lit))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -200,10 +217,17 @@ class ERLMLP(Model):
         --------
         y_pred: np.array of Mx1
         """
-        return self.forward(X, X_lit).data.numpy()
+        if self.gpu:
+            return self.forward(X, X_lit).cpu().data.numpy()
+        else:
+            return self.forward(X, X_lit).data.numpy()
 
     def loss(self, y_pred, y_true):
-        y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+        if self.gpu:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
+        else:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+
         return F.binary_cross_entropy(y_pred, y_true)
 
 
@@ -217,7 +241,7 @@ class RESCAL(Model):
     ICML. 2011.
     """
 
-    def __init__(self, n_e, n_r, k):
+    def __init__(self, n_e, n_r, k, gpu=False):
         """
         RESCAL: bilinear model
         ----------------------
@@ -232,8 +256,11 @@ class RESCAL(Model):
 
             k: int
                 Embedding size.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
         """
-        super(RESCAL, self).__init__()
+        super(RESCAL, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e
@@ -257,13 +284,22 @@ class RESCAL(Model):
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
     def forward(self, X):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs).view(-1, self.k, 1)
@@ -281,7 +317,11 @@ class RESCAL(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+        if self.gpu:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
+        else:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+
         return F.binary_cross_entropy(y_pred, y_true)
 
 
@@ -294,7 +334,7 @@ class DistMult(Model):
     neural-embedding models." arXiv:1411.4072 (2014).
     """
 
-    def __init__(self, n_e, n_r, k):
+    def __init__(self, n_e, n_r, k, gpu=False):
         """
         DistMult: diagonal bilinear model
         ---------------------------------
@@ -309,8 +349,11 @@ class DistMult(Model):
 
             k: int
                 Embedding size.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
         """
-        super(DistMult, self).__init__()
+        super(DistMult, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e
@@ -333,13 +376,22 @@ class DistMult(Model):
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
 
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
     def forward(self, X):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -354,7 +406,11 @@ class DistMult(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+        if self.gpu:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
+        else:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+
         return F.binary_cross_entropy(y_pred, y_true)
 
 
@@ -366,7 +422,7 @@ class ERMLP(Model):
     Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
-    def __init__(self, n_e, n_r, k, h_dim, p):
+    def __init__(self, n_e, n_r, k, h_dim, p, gpu=False):
         """
         ER-MLP: Entity-Relation MLP
         ---------------------------
@@ -387,8 +443,11 @@ class ERMLP(Model):
 
             p: float
                 Dropout rate.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
         """
-        super(ERMLP, self).__init__()
+        super(ERMLP, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e
@@ -402,12 +461,8 @@ class ERMLP(Model):
         self.emb_R = nn.Embedding(self.n_r, self.k)
 
         self.mlp = nn.Sequential(
-            nn.BatchNorm1d(3*k),
-            nn.Dropout(p=self.p),
             nn.Linear(3*k, h_dim),
             nn.ReLU(),
-            nn.BatchNorm1d(h_dim),
-            nn.Dropout(p=self.p),
             nn.Linear(h_dim, 1),
             nn.Sigmoid()
         )
@@ -430,13 +485,22 @@ class ERMLP(Model):
                 in_dim = p.weight.size(0)
                 p.weight.data.normal_(0, 1/np.sqrt(in_dim/2))
 
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
     def forward(self, X):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -450,7 +514,11 @@ class ERMLP(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+        if self.gpu:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
+        else:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+
         return F.binary_cross_entropy(y_pred, y_true)
 
 
@@ -463,7 +531,7 @@ class TransE(Model):
     "Translating embeddings for modeling multi-relational data." NIPS. 2013.
     """
 
-    def __init__(self, n_e, n_r, k, gamma, d='l2'):
+    def __init__(self, n_e, n_r, k, gamma, d='l2', gpu=False):
         """
         TransE embedding model
         ----------------------
@@ -484,8 +552,11 @@ class TransE(Model):
 
             d: {'l1', 'l2'}
                 Distance measure to be used in the loss.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
         """
-        super(TransE, self).__init__()
+        super(TransE, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e  # Num of entities
@@ -509,6 +580,10 @@ class TransE(Model):
         # Normalize rel embeddings
         self.emb_E.weight.data.renorm_(p=2, dim=0, maxnorm=1)
         self.emb_R.weight.data.renorm_(p=2, dim=0, maxnorm=1)
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
 
     def forward(self, X):
         """
@@ -539,11 +614,18 @@ class TransE(Model):
         hs, ls, ts = X_pos[:, 0], X_pos[:, 1], X_pos[:, 2]
         hcs, tcs = X_neg[:, 0], X_neg[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
-        hcs = Variable(torch.from_numpy(hcs))
-        tcs = Variable(torch.from_numpy(tcs))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+            hcs = Variable(torch.from_numpy(hcs).cuda())
+            tcs = Variable(torch.from_numpy(tcs).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
+            hcs = Variable(torch.from_numpy(hcs))
+            tcs = Variable(torch.from_numpy(tcs))
 
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
@@ -557,15 +639,22 @@ class TransE(Model):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        hs = Variable(torch.from_numpy(hs))
-        ls = Variable(torch.from_numpy(ls))
-        ts = Variable(torch.from_numpy(ts))
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
 
         e_hs = self.emb_E(hs)
         e_ls = self.emb_R(ls)
         e_ts = self.emb_E(ts)
 
-        return self.energy(e_hs, e_ls, e_ts).view(-1, 1).data.numpy()
+        energy = self.energy(e_hs, e_ls, e_ts).view(-1, 1)
+
+        return energy.cpu().data.numpy() if self.gpu else energy.data.numpy()
 
     def loss(self, y, y_true=None):
         h, l, t, hc, tc = y

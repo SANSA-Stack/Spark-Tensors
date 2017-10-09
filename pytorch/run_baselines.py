@@ -36,12 +36,16 @@ parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
                     help='decaying learning rate every n epoch (default: 10)')
 parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
                     help='L2 weight decay (default: 1e-4)')
+parser.add_argument('--normalize_embed', default=False, type=bool, metavar='',
+                    help='whether to normalize embeddings to unit euclidean ball (default: False)')
 parser.add_argument('--log_interval', type=int, default=100, metavar='',
                     help='interval between training status logs (default: 100)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
                     help='directory to save model checkpoint, saved every epoch (default: models/)')
-parser.add_argument('--resume', default=False, metavar='',
+parser.add_argument('--resume', default=False, type=bool, metavar='',
                     help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--use_gpu', default=False, type=bool, metavar='',
+                    help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
 
 args = parser.parse_args()
 
@@ -65,10 +69,10 @@ M_val = X_val.shape[0]
 
 # Initialize model
 models = {
-    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
-    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric)
+    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
+    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, gpu=args.use_gpu),
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu)
 }
 
 model = models[args.model]
@@ -123,7 +127,9 @@ for epoch in range(n_epoch):
         loss.backward()
         solver.step()
         solver.zero_grad()
-        # model.normalize_embeddings()
+
+        if args.normalize_embed:
+            model.normalize_embeddings()
 
         end = time()
 
@@ -140,7 +146,11 @@ for epoch in range(n_epoch):
 
                 # Validation accuracy
                 y_pred_val = model.forward(X_val)
-                val_acc = accuracy(y_pred_val.data.numpy(), y_val)
+
+                if args.use_gpu:
+                    val_acc = accuracy(y_pred_val.cpu().data.numpy(), y_val)
+                else:
+                    val_acc = accuracy(y_pred_val.data.numpy(), y_val)
 
                 # Validation loss
                 val_loss = model.loss(y_pred_val, y_val).data[0]

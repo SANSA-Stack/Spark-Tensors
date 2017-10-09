@@ -32,6 +32,8 @@ parser.add_argument('--nn_n', type=int, default=5, metavar='',
                     help='number of entities/relations for nearest neighbours (default: 5)')
 parser.add_argument('--nn_k', type=int, default=5, metavar='',
                     help='k in k-nearest-neighbours (default: 5)')
+parser.add_argument('--use_gpu', default=False, type=bool, metavar='',
+                    help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
 
 args = parser.parse_args()
 
@@ -47,10 +49,10 @@ X_test = np.load('data/NTN/{}/bin/test.npy'.format(args.dataset))
 y_test = np.load('data/NTN/{}/bin/y_test.npy'.format(args.dataset))
 
 models = {
-    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k),
-    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric)
+    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
+    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, gpu=args.use_gpu),
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu)
 }
 
 model = models[args.model]
