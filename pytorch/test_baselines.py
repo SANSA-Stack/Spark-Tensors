@@ -55,8 +55,11 @@ models = {
     'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu)
 }
 
-model = models[args.model]
-model.load_state_dict(torch.load('models/{}/{}.bin'.format(args.dataset, args.model)))
+model = models[args.model.split('_')[0]]
+
+model_name = 'models/{}/{}.bin'.format(args.dataset, args.model)
+state = torch.load(model_name, map_location=lambda storage, loc: storage)
+model.load_state_dict(state)
 
 
 # Evaluation metrics, e.g. acc, auc, mrr, hits@k
