@@ -36,6 +36,8 @@ parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
                     help='decaying learning rate every n epoch (default: 10)')
 parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
                     help='L2 weight decay (default: 1e-4)')
+parser.add_argument('--embeddings_lambda', type=float, default=1e-2, metavar='',
+                    help='prior strength for embeddings. Constraining embeddings into unit ball (default: 1e-2)')
 parser.add_argument('--normalize_embed', default=False, type=bool, metavar='',
                     help='whether to normalize embeddings to unit euclidean ball (default: False)')
 parser.add_argument('--log_interval', type=int, default=100, metavar='',
@@ -67,11 +69,13 @@ X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
+lam = args.embeddings_lambda
+
 # Initialize model
 models = {
-    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
-    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, gpu=args.use_gpu),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, gpu=args.use_gpu),
+    'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
+    'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, lam=lam, gpu=args.use_gpu),
     'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu)
 }
 

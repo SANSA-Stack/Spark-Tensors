@@ -57,7 +57,7 @@ class Model(nn.Module):
         else:
             return self.forward(X).data.numpy()
 
-    def loss(self, X):
+    def loss(self, y_pred, y_true, average=True):
         """
         Compute loss.
 
@@ -69,11 +69,27 @@ class Model(nn.Module):
         y_true: np.array of size Mx1 (binary)
             Contains the true labels.
 
+        average: bool, default: True
+            Whether to average the loss or just summing it.
+
         Returns:
         --------
         loss: float
         """
-        raise NotImplementedError
+        if self.gpu:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
+        else:
+            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
+
+        nll = F.binary_cross_entropy(y_pred, y_true, size_average=average)
+        nlp1 = torch.sum(torch.norm(self.emb_E.weight - 1, 2, 1))
+        nlp2 = torch.sum(torch.norm(self.emb_R.weight - 1, 2, 1))
+
+        if average:
+            nlp1 /= nlp1.size(0)
+            nlp2 /= nlp2.size(0)
+
+        return nll + self.lam*nlp1 + self.lam*nlp2
 
     def normalize_embeddings(self):
         for e in self.embeddings:
@@ -241,7 +257,7 @@ class RESCAL(Model):
     ICML. 2011.
     """
 
-    def __init__(self, n_e, n_r, k, gpu=False):
+    def __init__(self, n_e, n_r, k, lam, gpu=False):
         """
         RESCAL: bilinear model
         ----------------------
@@ -257,6 +273,11 @@ class RESCAL(Model):
             k: int
                 Embedding size.
 
+            lam: float
+                Prior strength of the embeddings. Used to constaint the
+                embedding norms inside a (euclidean) unit ball. The prior is
+                Gaussian, this param is the precision.
+
             gpu: bool, default: False
                 Whether to use GPU or not.
         """
@@ -266,6 +287,7 @@ class RESCAL(Model):
         self.n_e = n_e
         self.n_r = n_r
         self.k = k
+        self.lam = lam
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
@@ -317,12 +339,7 @@ class RESCAL(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        if self.gpu:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
-        else:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-
-        return F.binary_cross_entropy(y_pred, y_true)
+        return super(RESCAL, self).loss(y_pred, y_true, False)
 
 
 @inherit_docstrings
@@ -334,7 +351,7 @@ class DistMult(Model):
     neural-embedding models." arXiv:1411.4072 (2014).
     """
 
-    def __init__(self, n_e, n_r, k, gpu=False):
+    def __init__(self, n_e, n_r, k, lam, gpu=False):
         """
         DistMult: diagonal bilinear model
         ---------------------------------
@@ -350,6 +367,11 @@ class DistMult(Model):
             k: int
                 Embedding size.
 
+            lam: float
+                Prior strength of the embeddings. Used to constaint the
+                embedding norms inside a (euclidean) unit ball. The prior is
+                Gaussian, this param is the precision.
+
             gpu: bool, default: False
                 Whether to use GPU or not.
         """
@@ -359,6 +381,7 @@ class DistMult(Model):
         self.n_e = n_e
         self.n_r = n_r
         self.k = k
+        self.lam = lam
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
@@ -406,12 +429,7 @@ class DistMult(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        if self.gpu:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
-        else:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-
-        return F.binary_cross_entropy(y_pred, y_true)
+        return super(DistMult, self).loss(y_pred, y_true, False)
 
 
 @inherit_docstrings
@@ -422,7 +440,7 @@ class ERMLP(Model):
     Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
-    def __init__(self, n_e, n_r, k, h_dim, p, gpu=False):
+    def __init__(self, n_e, n_r, k, h_dim, p, lam, gpu=False):
         """
         ER-MLP: Entity-Relation MLP
         ---------------------------
@@ -444,6 +462,11 @@ class ERMLP(Model):
             p: float
                 Dropout rate.
 
+            lam: float
+                Prior strength of the embeddings. Used to constaint the
+                embedding norms inside a (euclidean) unit ball. The prior is
+                Gaussian, this param is the precision.
+
             gpu: bool, default: False
                 Whether to use GPU or not.
         """
@@ -455,6 +478,7 @@ class ERMLP(Model):
         self.k = k
         self.h_dim = h_dim
         self.p = p
+        self.lam = lam
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
@@ -463,6 +487,7 @@ class ERMLP(Model):
         self.mlp = nn.Sequential(
             nn.Linear(3*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(p=self.p),
             nn.Linear(h_dim, 1),
             nn.Sigmoid()
         )
@@ -514,12 +539,7 @@ class ERMLP(Model):
         return y_prob
 
     def loss(self, y_pred, y_true):
-        if self.gpu:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
-        else:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-
-        return F.binary_cross_entropy(y_pred, y_true)
+        return super(ERMLP, self).loss(y_pred, y_true)
 
 
 @inherit_docstrings
