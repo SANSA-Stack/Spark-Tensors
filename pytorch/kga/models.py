@@ -82,8 +82,13 @@ class Model(nn.Module):
             y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
 
         nll = F.binary_cross_entropy(y_pred, y_true, size_average=average)
-        nlp1 = torch.sum(torch.norm(self.emb_E.weight - 1, 2, 1))
-        nlp2 = torch.sum(torch.norm(self.emb_R.weight - 1, 2, 1))
+
+        norm_E = torch.norm(self.emb_E.weight, 2, 1)
+        norm_R = torch.norm(self.emb_R.weight, 2, 1)
+
+        # Penalize when embeddings norms larger than one
+        nlp1 = torch.sum(torch.clamp(norm_E - 1, min=0))
+        nlp2 = torch.sum(torch.clamp(norm_R - 1, min=0))
 
         if average:
             nlp1 /= nlp1.size(0)

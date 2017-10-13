@@ -37,7 +37,7 @@ parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
 parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
                     help='L2 weight decay (default: 1e-4)')
 parser.add_argument('--embeddings_lambda', type=float, default=1e-2, metavar='',
-                    help='prior strength for embeddings. Constraining embeddings into unit ball (default: 1e-2)')
+                    help='prior strength for embeddings. Constraints embeddings norms to at most one  (default: 1e-2)')
 parser.add_argument('--normalize_embed', default=False, type=bool, metavar='',
                     help='whether to normalize embeddings to unit euclidean ball (default: False)')
 parser.add_argument('--log_interval', type=int, default=100, metavar='',
