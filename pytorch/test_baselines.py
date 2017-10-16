@@ -46,6 +46,10 @@ idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
 n_e = len(idx2ent)
 n_r = len(idx2rel)
 
+# Load val data
+X_val = np.load('data/NTN/{}/bin/val.npy'.format(args.dataset))
+y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
+
 # Load test data
 X_test = np.load('data/NTN/{}/bin/test.npy'.format(args.dataset))
 y_test = np.load('data/NTN/{}/bin/y_test.npy'.format(args.dataset))
@@ -73,18 +77,46 @@ print()
 print('Test result for: {}'.format(args.model))
 print('-----------------------------')
 
-if args.model != 'transe':
+if 'transe' not in args.model:
     y_pred = model.predict(X_test)
 
-    print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_test)))
+    # Find the best classification threshold using dev set
+    thresh = find_clf_threshold(model, X_val, y_val)
+
+    print('Accuracy: {:.4f}'.format(accuracy(y_pred, y_test, thresh=thresh)))
     print('AUC: {:.4f}'.format(auc(y_pred, y_test)))
-    print(classification_report(y_test, (y_pred > 0.5)))
+    print(classification_report(y_test, (y_pred > thresh)))
 else:
     # Only take positive samples
     X_pos = X_test[y_test.ravel() == 1, :]
     mrr, hitsk = eval_embeddings(model, X_pos, n_e, k=args.hit_k)
 
-    print('MRR: {:.4f}, Hits@{}: {:.4f}'.format(mrr, args.hit_k, hitsk))
+    print('MRR: {:.4f}'.format(mrr))
+    print('Hits@{}: {:.4f}'.format(args.hit_k, hitsk))
+
+    # Find the best thresholds for TransE using the validation set
+    y_pred = model.predict(X_test)
+
+    acc = 0
+
+    for r in range(n_r):
+        # Get data where the relation == r
+        idxs = (X_val[:, 1] == r)
+        X_val_r = X_val[idxs, :]
+        y_val_r = y_val[idxs, :]
+
+        # Find the best thresholds for this relation
+        thresh = find_clf_threshold(model, X_val_r, y_val_r)
+
+        # Use the threshold on test set
+        idxs = (X_test[:, 1] == r)
+        X_test_r = X_test[idxs, :]
+        y_test_r = y_test[idxs, :]
+        y_pred_r = y_pred[idxs, :]
+
+        acc += accuracy(y_pred_r, y_test_r, thresh=thresh)
+
+    print('Accuracy: {:.4f}'.format(acc/n_r))
 
 
 # Nearest-neighbours

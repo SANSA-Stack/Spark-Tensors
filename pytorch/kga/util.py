@@ -4,6 +4,8 @@ from inspect import getmembers, isfunction
 from sklearn.utils import shuffle as skshuffle
 from time import time
 
+import kga.metrics
+
 
 def sample_negatives(X, n_e):
     """
@@ -210,6 +212,44 @@ def get_random_minibatch(X, mb_size):
     """
     idxs = np.random.choice(np.arange(X.shape[0]), size=mb_size, replace=False)
     return X[idxs, :]
+
+
+def find_clf_threshold(model, X, y_true, increment=0.01):
+    """
+    Find binary classification threshold given a model which produces scores.
+
+    Params:
+    -------
+    model: kga.Model
+        Model that generates scores over the data.
+
+    X: np.array of M x 3
+        Contains the triplets from dataset. The entities and relations are
+        translated to its unique indices.
+
+    y_true: np.array of M x 1
+        Contains the correct labels.
+
+    Returns:
+    --------
+    thresh: float
+        Number that can be used for thresholding the scores to obtain class
+        labels.
+    """
+    thresh = 0
+    best_acc = 0
+
+    y_pred = model.predict(X)
+    min_score, max_score = np.min(y_pred), np.max(y_pred)
+
+    for t in np.arange(min_score, max_score, step=increment):
+        acc = kga.metrics.accuracy(y_pred, y_true, thresh=t)
+
+        if acc > best_acc:
+            thresh = t
+            best_acc = acc
+
+    return thresh
 
 
 def inherit_docstrings(cls):
