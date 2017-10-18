@@ -26,6 +26,8 @@ parser.add_argument('--mlp_h', type=int, default=100, metavar='',
                     help='size of ER-MLP hidden layer (default: 100)')
 parser.add_argument('--mlp_dropout_p', type=float, default=0.5, metavar='',
                     help='Probability of dropping out neuron in dropout (default: 0.5)')
+parser.add_argument('--ntn_slice', type=int, default=4, metavar='',
+                    help='number of slices used in NTN (default: 4)')
 parser.add_argument('--embeddings_lambda', type=float, default=1e-2, metavar='',
                     help='prior strength for embeddings. Constraints embeddings norms to at most one  (default: 1e-2)')
 parser.add_argument('--hit_k', type=int, default=10, metavar='',
@@ -60,7 +62,8 @@ models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
     'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, lam=lam, gpu=args.use_gpu),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu)
+    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu),
+    'ntn': NTN(n_e=n_e, n_r=n_r, k=args.k, lam=lam, slice=args.ntn_slice, gpu=args.use_gpu)
 }
 
 model = models[args.model.split('_')[0]]
