@@ -30,6 +30,8 @@ parser.add_argument('--ntn_slice', type=int, default=4, metavar='',
                     help='number of slices used in NTN (default: 4)')
 parser.add_argument('--mbsize', type=int, default=100, metavar='',
                     help='size of minibatch (default: 100)')
+parser.add_argument('--negative_samples', type=int, default=10, metavar='',
+                    help='number of negative samples per positive sample  (default: 10)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
 parser.add_argument('--lr', type=float, default=0.1, metavar='',
@@ -72,6 +74,7 @@ M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
 lam = args.embeddings_lambda
+C = args.negative_samples
 
 # Initialize model
 models = {
@@ -123,10 +126,11 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
 
-        X_neg_mb = sample_negatives(X_mb, n_e)
+        # C x m negative samples
+        X_neg_mb = np.vstack([sample_negatives(X_mb, n_e) for _ in range(C)])
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
-        y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
+        y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([C*m, 1])-1])
 
         # Training step
         y = model.forward(X_train_mb)
@@ -149,7 +153,7 @@ for epoch in range(n_epoch):
 
                 # Per class training accuracy
                 pos_acc = accuracy(pred[:m], np.ones([m, 1]))
-                neg_acc = accuracy(pred[m:], np.zeros([m, 1]))
+                neg_acc = accuracy(pred[m:], np.zeros([C*m, 1]))
 
                 # Validation accuracy
                 y_pred_val = model.forward(X_val)
