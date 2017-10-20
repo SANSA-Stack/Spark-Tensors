@@ -38,8 +38,19 @@ parser.add_argument('--nn_k', type=int, default=5, metavar='',
                     help='k in k-nearest-neighbours (default: 5)')
 parser.add_argument('--use_gpu', default=False, type=bool, metavar='',
                     help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
+parser.add_argument('--randseed', default=9999, type=int, metavar='',
+                    help='resume the training from latest checkpoint (default: False')
 
 args = parser.parse_args()
+
+
+# Set random seed
+np.random.seed(args.randseed)
+torch.manual_seed(args.randseed)
+
+if args.use_gpu:
+    torch.cuda.manual_seed(args.randseed)
+
 
 # Load dictionary lookups
 idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))

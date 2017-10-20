@@ -37,7 +37,7 @@ class Model(nn.Module):
         """
         raise NotImplementedError
 
-    def predict(self, X):
+    def predict(self, X, sigmoid=False):
         """
         Predict the score of test batch.
 
@@ -48,23 +48,32 @@ class Model(nn.Module):
             Second row contains index of relationships.
             Third row contains index of tail entities.
 
+        sigmoid: bool, default: False
+            Whether to apply sigmoid at the prediction or not. Useful if the
+            predicted result is scores/logits.
+
         Returns:
         --------
         y_pred: np.array of Mx1
         """
-        if self.gpu:
-            return self.forward(X).cpu().data.numpy()
-        else:
-            return self.forward(X).data.numpy()
+        y_pred = self.forward(X).view(-1, 1)
 
-    def loss(self, y_pred, y_true, average=True):
+        if sigmoid:
+            y_pred = F.sigmoid(y_pred)
+
+        if self.gpu:
+            return y_pred.cpu().data.numpy()
+        else:
+            return y_pred.data.numpy()
+
+    def log_loss(self, y_pred, y_true, average=True):
         """
-        Compute loss.
+        Compute log loss (Bernoulli NLL).
 
         Params:
         -------
         y_pred: vector of size Mx1
-            Contains prediction probabilities.
+            Contains prediction logits.
 
         y_true: np.array of size Mx1 (binary)
             Contains the true labels.
@@ -81,7 +90,7 @@ class Model(nn.Module):
         else:
             y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
 
-        nll = F.binary_cross_entropy(y_pred, y_true, size_average=average)
+        nll = F.binary_cross_entropy_with_logits(y_pred, y_true, size_average=average)
 
         norm_E = torch.norm(self.emb_E.weight, 2, 1)
         norm_R = torch.norm(self.emb_R.weight, 2, 1)
@@ -95,6 +104,50 @@ class Model(nn.Module):
             nlp2 /= nlp2.size(0)
 
         return nll + self.lam*nlp1 + self.lam*nlp2
+
+    def ranking_loss(self, y_pos, y_neg, margin=1, C=1, average=True):
+        """
+        Compute loss max margin ranking loss.
+
+        Params:
+        -------
+        y_pos: vector of size Mx1
+            Contains scores for positive samples.
+
+        y_neg: np.array of size Mx1 (binary)
+            Contains the true labels.
+
+        margin: float, default: 1
+            Margin used for the loss.
+
+        C: int, default: 1
+            Number of negative samples per positive sample.
+
+        average: bool, default: True
+            Whether to average the loss or just summing it.
+
+        Returns:
+        --------
+        loss: float
+        """
+        M = y_pos.size(0)
+
+        y_pos = y_pos.view(-1).repeat(C)  # repeat to match y_neg
+        y_neg = y_neg.view(-1)
+
+        # target = [-1, -1, ..., -1], i.e. y_neg should be higher than y_pos
+        target = -np.ones(M*C, dtype=np.float32)
+
+        if self.gpu:
+            target = Variable(torch.from_numpy(target).cuda())
+        else:
+            target = Variable(torch.from_numpy(target))
+
+        loss = F.margin_ranking_loss(
+            y_pos, y_neg, target, margin=margin, size_average=average
+        )
+
+        return loss
 
     def normalize_embeddings(self):
         for e in self.embeddings:
@@ -242,14 +295,6 @@ class ERLMLP(Model):
         else:
             return self.forward(X, X_lit).data.numpy()
 
-    def loss(self, y_pred, y_true):
-        if self.gpu:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)).cuda())
-        else:
-            y_true = Variable(torch.from_numpy(y_true.astype(np.float32)))
-
-        return F.binary_cross_entropy(y_pred, y_true)
-
 
 @inherit_docstrings
 class RESCAL(Model):
@@ -327,13 +372,7 @@ class RESCAL(Model):
         out = torch.bmm(out, e_ts)  # (h^T W) h
         out = out.view(-1, 1)  # [-1, 1, 1] -> [-1, 1]
 
-        y_prob = F.sigmoid(out)
-        y_prob = y_prob.view(-1, 1)  # Reshape to Mx1
-
-        return y_prob
-
-    def loss(self, y_pred, y_true):
-        return super(RESCAL, self).loss(y_pred, y_true, False)
+        return out
 
 
 @inherit_docstrings
@@ -408,13 +447,8 @@ class DistMult(Model):
 
         # Forward
         f = torch.sum(e_hs * W * e_ts, 1)
-        y_prob = F.sigmoid(f)
-        y_prob = y_prob.view(-1, 1)  # Reshape to Mx1
 
-        return y_prob
-
-    def loss(self, y_pred, y_true):
-        return super(DistMult, self).loss(y_pred, y_true, False)
+        return f.view(-1, 1)
 
 
 @inherit_docstrings
@@ -474,7 +508,6 @@ class ERMLP(Model):
             nn.ReLU(),
             nn.Dropout(p=self.p),
             nn.Linear(h_dim, 1),
-            nn.Sigmoid()
         )
 
         self.embeddings = [self.emb_E, self.emb_R]
@@ -510,12 +543,9 @@ class ERMLP(Model):
 
         # Forward
         phi = torch.cat([e_hs, e_ts, e_ls], 1)  # M x 3k
-        y_prob = self.mlp(phi)
+        y = self.mlp(phi)
 
-        return y_prob
-
-    def loss(self, y_pred, y_true):
-        return super(ERMLP, self).loss(y_pred, y_true)
+        return y.view(-1, 1)
 
 
 @inherit_docstrings
@@ -578,8 +608,7 @@ class TransE(Model):
 
     def forward(self, X):
         """
-        Given a (mini)batch of triplets X of size M, create corrupted triplets,
-        and compute all the embeddings.
+        Given a (mini)batch of triplets X of size M, compute the energies.
 
         Params:
         -------
@@ -587,46 +616,12 @@ class TransE(Model):
             First column contains index of head entities.
             Second column contains index of relationships.
             Third column contains index of tail entities.
-            First M/2 rows are positive data, the rest are negative samples.
 
         Returns:
         --------
-        y: tuple of 5 embeddings
-            Contains the embeddings of (order matters!): head, rel, tail,
-            corrupted head, corrupted tail.
+        f: float matrix of M x 1
+            Contains energies of each triplets.
         """
-        M = X.shape[0]
-
-        # Negative sampling
-        X_pos = X[:int(M/2), :]
-        X_neg = X[int(M/2):, :]
-
-        # Decompose X into head, relationship, tail
-        hs, ls, ts = X_pos[:, 0], X_pos[:, 1], X_pos[:, 2]
-        hcs, tcs = X_neg[:, 0], X_neg[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            hcs = Variable(torch.from_numpy(hcs).cuda())
-            tcs = Variable(torch.from_numpy(tcs).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            hcs = Variable(torch.from_numpy(hcs))
-            tcs = Variable(torch.from_numpy(tcs))
-
-        e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
-        e_ls = self.emb_R(ls)
-        e_hcs = self.emb_E(hcs)
-        e_tcs = self.emb_E(tcs)
-
-        return e_hs, e_ls, e_ts, e_hcs, e_tcs
-
-    def predict(self, X):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
@@ -640,20 +635,12 @@ class TransE(Model):
             ts = Variable(torch.from_numpy(ts))
 
         e_hs = self.emb_E(hs)
-        e_ls = self.emb_R(ls)
         e_ts = self.emb_E(ts)
+        e_ls = self.emb_R(ls)
 
-        energy = self.energy(e_hs, e_ls, e_ts).view(-1, 1)
+        f = self.energy(e_hs, e_ls, e_ts).view(-1, 1)
 
-        return energy.cpu().data.numpy() if self.gpu else energy.data.numpy()
-
-    def loss(self, y, y_true=None):
-        h, l, t, hc, tc = y
-
-        d_pos = self.energy(h, l, t)
-        d_neg = self.energy(hc, l, tc)
-
-        return torch.sum(F.relu(self.gamma + d_pos - d_neg).view(-1, 1))
+        return f
 
     def energy(self, h, l, t):
         """
@@ -784,9 +771,4 @@ class NTN(Model):
         # Scores
         g = torch.bmm(Ur, F.leaky_relu(quad + affine).view(-1, self.slice, 1))
 
-        y_prob = F.sigmoid(g.view(-1, 1))  # M x 1
-
-        return y_prob
-
-    def loss(self, y_pred, y_true):
-        return super(NTN, self).loss(y_pred, y_true, True)
+        return g.view(-1, 1)

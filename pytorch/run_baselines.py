@@ -6,6 +6,7 @@ import torch.optim
 import argparse
 import os
 from time import time
+from sklearn.utils import shuffle as skshuffle
 
 
 parser = argparse.ArgumentParser(
@@ -34,6 +35,10 @@ parser.add_argument('--negative_samples', type=int, default=10, metavar='',
                     help='number of negative samples per positive sample  (default: 10)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
+parser.add_argument('--loss', default='logloss', metavar='',
+                    help='loss function to be used, {"logloss", "rankloss"} (default: "logloss")')
+parser.add_argument('--average_loss', default=False, action='store_true',
+                    help='whether to average or sum the loss over minibatch')
 parser.add_argument('--lr', type=float, default=0.1, metavar='',
                     help='learning rate (default: 0.1)')
 parser.add_argument('--lr_decay_every', type=int, default=10, metavar='',
@@ -52,8 +57,18 @@ parser.add_argument('--resume', default=False, type=bool, metavar='',
                     help='resume the training from latest checkpoint (default: False')
 parser.add_argument('--use_gpu', default=False, type=bool, metavar='',
                     help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
+parser.add_argument('--randseed', default=9999, type=int, metavar='',
+                    help='resume the training from latest checkpoint (default: False')
 
 args = parser.parse_args()
+
+
+# Set random seed
+np.random.seed(args.randseed)
+torch.manual_seed(args.randseed)
+
+if args.use_gpu:
+    torch.cuda.manual_seed(args.randseed)
 
 
 # Load dictionary lookups
@@ -126,15 +141,30 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
 
-        # C x m negative samples
-        X_neg_mb = np.vstack([sample_negatives(X_mb, n_e) for _ in range(C)])
+        if args.loss == 'rankloss':
+            # C x M negative samples
+            X_neg_mb = np.vstack([sample_negatives(X_mb, n_e) for _ in range(C)])
+        else:
+            X_neg_mb = sample_negatives(X_mb, n_e)
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
-        y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([C*m, 1])-1])
+        y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
+
+        if args.loss == 'logloss':
+            X_train_mb, y_true_mb = skshuffle(X_train_mb, y_true_mb)
 
         # Training step
         y = model.forward(X_train_mb)
-        loss = model.loss(y, y_true_mb)
+
+        if args.loss == 'rankloss':
+            y_pos, y_neg = y[:m], y[m:]
+
+            loss = model.ranking_loss(
+                y_pos, y_neg, margin=args.transe_gamma, C=C, average=False
+            )
+        elif args.loss == 'logloss':
+            loss = model.log_loss(y, y_true_mb, average=args.average_loss)
+
         loss.backward()
         solver.step()
         solver.zero_grad()
@@ -146,28 +176,29 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            if args.model != 'transe':
+            if args.loss == 'logloss':
                 # Training accuracy
-                pred = model.predict(X_train_mb)
+                pred = model.predict(X_train_mb, sigmoid=True)
                 train_acc = accuracy(pred, y_true_mb)
 
                 # Per class training accuracy
-                pos_acc = accuracy(pred[:m], np.ones([m, 1]))
-                neg_acc = accuracy(pred[m:], np.zeros([C*m, 1]))
+                pos_acc = accuracy(pred[:m], y_true_mb[:m])
+                neg_acc = accuracy(pred[m:], y_true_mb[m:])
 
                 # Validation accuracy
                 y_pred_val = model.forward(X_val)
+                y_prob_val = F.sigmoid(y_pred_val)
 
                 if args.use_gpu:
-                    val_acc = accuracy(y_pred_val.cpu().data.numpy(), y_val)
+                    val_acc = accuracy(y_prob_val.cpu().data.numpy(), y_val)
                 else:
-                    val_acc = accuracy(y_pred_val.data.numpy(), y_val)
+                    val_acc = accuracy(y_prob_val.data.numpy(), y_val)
 
                 # Validation loss
-                val_loss = model.loss(y_pred_val, y_val).data[0]
+                val_loss = model.log_loss(y_pred_val, y_val, args.average_loss)
 
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss, end-start))
+                      .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
             else:
                 mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10)
 
