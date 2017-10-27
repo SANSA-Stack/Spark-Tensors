@@ -92,8 +92,8 @@ M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
 
-def evaluate_model(decay, lam):
-    decay, lam = float(decay), float(lam)
+def evaluate_model(lr, decay, lam):
+    lr, decay, lam = float(lr), float(decay), float(lam)
 
     C = args.negative_samples
 
@@ -109,7 +109,7 @@ def evaluate_model(decay, lam):
     model = models[args.model]
 
     # Training params
-    solver = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=decay)
+    solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=decay)
     n_epoch = args.nepoch
     mb_size = args.mbsize  # 2x with negative sampling
 
@@ -119,7 +119,7 @@ def evaluate_model(decay, lam):
         mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
 
         # Anneal learning rate
-        lr = args.lr * (0.1 ** (epoch // args.lr_decay_every))
+        lr = lr * (0.5 ** (epoch // args.lr_decay_every))
         for param_group in solver.param_groups:
             param_group['lr'] = lr
 
@@ -158,23 +158,27 @@ def evaluate_model(decay, lam):
             if args.normalize_embed:
                 model.normalize_embeddings()
 
-    # Return the evaluation on validation set
-    if args.loss == 'logloss':
-        # Validation accuracy
-        y_pred_val = model.forward(X_val)
-        y_prob_val = F.sigmoid(y_pred_val)
+    try:
+        # Return the evaluation on validation set
+        if args.loss == 'logloss':
+            # Validation accuracy
+            y_pred_val = model.forward(X_val)
+            y_prob_val = F.sigmoid(y_pred_val)
 
-        if args.use_gpu:
-            val_auc = auc(y_prob_val.cpu().data.numpy(), y_val)
+            if args.use_gpu:
+                val_auc = auc(y_prob_val.cpu().data.numpy(), y_val)
+            else:
+                val_auc = auc(y_prob_val.data.numpy(), y_val)
+
+            return val_auc
         else:
-            val_auc = auc(y_prob_val.data.numpy(), y_val)
+            # For ranking loss, return hits@10
+            mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10)
 
-        return val_auc
-    else:
-        # For ranking loss, return hits@10
-        mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10)
-
-        return hits10
+            return hits10
+    except:
+        # Error occurs, e.g. weights becomes NaN
+        return 0
 
 
 # ------------------------------
@@ -190,8 +194,9 @@ num_iter = args.n_iter
 init_points = args.init_points
 
 opt = {
-    'decay': (1e-7, 1e-2),
-    'lam': (1e-7, 1),
+    'lr': (1e-6, 1),
+    'decay': (1e-8, 1e-3),
+    'lam': (1e-6, 1),
 }
 
 bo = BayesianOptimization(evaluate_model, opt)
@@ -211,6 +216,7 @@ bo.maximize(init_points=init_points, n_iter=num_iter, acq='ucb')
 
 # Append new infos to prior
 for params, target in zip(bo.res['all']['params'], bo.res['all']['values']):
+    init_dict['lr'].append(params['lr'])
     init_dict['decay'].append(params['decay'])
     init_dict['lam'].append(params['lam'])
     init_dict['target'].append(target)
