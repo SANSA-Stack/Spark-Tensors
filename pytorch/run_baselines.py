@@ -131,7 +131,7 @@ for epoch in range(n_epoch):
     mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
 
     # Anneal learning rate
-    lr = args.lr * (0.1 ** (epoch // args.lr_decay_every))
+    lr = args.lr * (0.5 ** (epoch // args.lr_decay_every))
     for param_group in solver.param_groups:
         param_group['lr'] = lr
 

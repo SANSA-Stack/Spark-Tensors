@@ -30,6 +30,8 @@ parser.add_argument('--ntn_slice', type=int, default=4, metavar='',
                     help='number of slices used in NTN (default: 4)')
 parser.add_argument('--embeddings_lambda', type=float, default=1e-2, metavar='',
                     help='prior strength for embeddings. Constraints embeddings norms to at most one  (default: 1e-2)')
+parser.add_argument('--loss', default='logloss', metavar='',
+                    help='loss function to be used, {"logloss", "rankloss"} (default: "logloss")')
 parser.add_argument('--hit_k', type=int, default=10, metavar='',
                     help='hit@k metrics (default: 10)')
 parser.add_argument('--nn_n', type=int, default=5, metavar='',
@@ -91,7 +93,7 @@ print()
 print('Test result for: {}'.format(args.model))
 print('-----------------------------')
 
-if 'transe' not in args.model:
+if args.loss == 'logloss':
     y_pred = model.predict(X_test)
 
     # Find the best classification threshold using dev set
@@ -128,7 +130,7 @@ else:
         y_test_r = y_test[idxs, :]
         y_pred_r = y_pred[idxs, :]
 
-        acc += accuracy(y_pred_r, y_test_r, thresh=thresh)
+        acc += accuracy(y_pred_r, y_test_r, thresh=thresh, reverse=True)
 
     print('Accuracy: {:.4f}'.format(acc/n_r))
 

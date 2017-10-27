@@ -5,7 +5,7 @@ from collections import defaultdict
 import scipy.stats as st
 
 
-def accuracy(y_pred, y_true, thresh=0.5):
+def accuracy(y_pred, y_true, thresh=0.5, reverse=False):
     """
     Compute accuracy score.
 
@@ -14,13 +14,16 @@ def accuracy(y_pred, y_true, thresh=0.5):
     y_pred: np.array
         Predicted (Bernoulli) probabilities.
 
+    y_true: np.array, binary
+        True (Bernoulli) labels.
+
     thresh: float, default: 0.5
         Classification threshold.
 
-    y_true: np.array, binary
-        True (Bernoulli) labels.
+    reverse: bool, default: False
+        If it is True, then classify (y <= thresh) to be 1.
     """
-    y = (y_pred >= thresh)
+    y = (y_pred >= thresh) if not reverse else (y_pred <= thresh)
     return np.mean(y == y_true)
 
 

@@ -214,7 +214,7 @@ def get_random_minibatch(X, mb_size):
     return X[idxs, :]
 
 
-def find_clf_threshold(model, X, y_true, increment=0.01):
+def find_clf_threshold(model, X, y_true, increment=0.01, reverse=False):
     """
     Find binary classification threshold given a model which produces scores.
 
@@ -230,6 +230,9 @@ def find_clf_threshold(model, X, y_true, increment=0.01):
     y_true: np.array of M x 1
         Contains the correct labels.
 
+    reverse: bool, default: False
+        If it is True, then classify (y <= thresh) to be 1.
+
     Returns:
     --------
     thresh: float
@@ -243,7 +246,7 @@ def find_clf_threshold(model, X, y_true, increment=0.01):
     min_score, max_score = np.min(y_pred), np.max(y_pred)
 
     for t in np.arange(min_score, max_score, step=increment):
-        acc = kga.metrics.accuracy(y_pred, y_true, thresh=t)
+        acc = kga.metrics.accuracy(y_pred, y_true, thresh=t, reverse=reverse)
 
         if acc > best_acc:
             thresh = t
