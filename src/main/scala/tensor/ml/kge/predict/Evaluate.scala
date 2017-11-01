@@ -18,11 +18,11 @@ class Evaluate(model: TransE, test: DataFrame, sk: SparkSession) extends Predict
   def leftRank(row: Row) = {
 
     var x: Seq[Float] = List()
-    val y = model.myL(row)
+    val y = model.norm(row)
 
     x = y +: x
     for (i <- 1 until test.count().toInt) {
-      x = model.myL(head(i, row)) +: x
+      x = model.norm(head(i, row)) +: x
     }
 
     x.sorted.indexOf(y)
@@ -31,11 +31,11 @@ class Evaluate(model: TransE, test: DataFrame, sk: SparkSession) extends Predict
   def rightRank(row: Row) = {
 
     var x: Seq[Float] = List()
-    val y = model.myL(row)
+    val y = model.norm(row)
 
     x = y +: x
     for (i <- 1 until test.count().toInt) {
-      x = model.myL(tail(i, row)) +: x
+      x = model.norm(tail(i, row)) +: x
     }
 
     x.sorted.indexOf(y)
