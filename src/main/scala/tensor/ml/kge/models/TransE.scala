@@ -11,17 +11,18 @@ import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
 import tensor.ml.kge.dataset.Dataset
+import com.intel.analytics.bigdl.nn.L1Cost
 
 class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) extends Models {
 
   val batch = 100
-  val epochs = 100
+  val epochs = 1000
   val rate = 0.01f
 
   var e = initialize(train.s)
   var l = normalize(initialize(train.p))
 
-  val myL = L match {
+  val norm = L match {
     case "L2" => L2 _
     case _ => L1 _
   }
@@ -39,7 +40,7 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   import sk.implicits._
 
   def subset(data: DataFrame) = {
-    data.sample(false, (batch / data.count()).toDouble).toDF()
+    data.sample(false, batch.toDouble / data.count().toDouble).toDF()
   }
 
   val seed = new Random(System.currentTimeMillis())
@@ -69,12 +70,12 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   }
 
   def L1(vec: Row) = {
-    (e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))).abs().sum().toFloat
+    (e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))).abs().sum()
   }
 
   def L2(vec: Row) = {
     val p = Power(2, 1, 1)
-    (p.forward(e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2)))).sqrt().sum().toFloat
+    Math.sqrt((p.forward(e(vec.getInt(0))) + p.forward(l(vec.getInt(1))) - p.forward(e(vec.getInt(2)))).sum().toDouble).toFloat
   }
 
   def run() = {
@@ -95,14 +96,14 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
         val en = neg.rdd.take(j).last
 
         def delta(x: Tensor[Float]) = {
-          (myL(ep) - myL(en), x)
+          (norm(ep) - norm(en), x)
         }
 
-        if (m + myL(ep) > myL(en)) {
+        if (m + norm(ep) > norm(en)) {
 
           ept.optimize(delta, e)
           lpt.optimize(delta, l)
-          err += m + myL(ep) - myL(en)
+          err += m + norm(ep) - norm(en)
         }
       }
 
