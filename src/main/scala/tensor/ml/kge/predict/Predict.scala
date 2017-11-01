@@ -3,10 +3,10 @@ package tensor.ml.kge.predict
 import org.apache.spark.sql._
 
 abstract class Predict(test: DataFrame) {
-  
-  var left:  Seq[Float] = List()
+
+  var left: Seq[Float] = List()
   var right: Seq[Float] = List()
-    
+
   def leftRank(row: Row): Float
 
   def rightRank(row: Row): Float
@@ -14,16 +14,16 @@ abstract class Predict(test: DataFrame) {
   def ranking() = {
 
     test.collect().map { row =>
-      left  = left  :+ leftRank(row)
+      left = left :+ leftRank(row)
       right = right :+ rightRank(row)
     }
-    
+
     (left, right)
   }
 
   def mean() {
-    (left.sum/left.length,
-      right.sum/right.length)
+    (left.sum / left.length,
+      right.sum / right.length)
   }
 
 }
