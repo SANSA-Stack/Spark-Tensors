@@ -1,55 +1,64 @@
 package tensor.ml.kge.models
 
-import ml.dmlc.mxnet._
-import ml.dmlc.mxnet.NDArray._
-import ml.dmlc.mxnet.optimizer.AdaGrad
+import scala.math._
+import scala.util._
 
 import org.apache.spark.sql._
 
-import scala.util._
+import com.intel.analytics.bigdl.nn.Power
+import com.intel.analytics.bigdl.optim.Adam
+import com.intel.analytics.bigdl.tensor.Tensor
+import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
 import tensor.ml.kge.dataset.Dataset
 
-class TransE(train: Dataset, m: Float, k: Int, sk: SparkSession) extends Models {
+class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) extends Models {
 
   val batch = 100
   val epochs = 100
   val rate = 0.01f
 
-  var e = initialize(train.s.length)
-  var l = normalize(initialize(train.p.length))
+  var e = initialize(train.s)
+  var l = normalize(initialize(train.p))
 
-  val seed = new Random(System.currentTimeMillis())
-
-  def initialize(size: Int) = {
-    NDArray.uniform(-6 / Math.sqrt(k), 6 / Math.sqrt(k), (size, k))
+  val myL = L match {
+    case "L2" => L2 _
+    case _ => L1 _
   }
 
-  def normalize(data: NDArray) = {
-    L2Normalization(data, 0, "instance")
+  def initialize(data: Array[String]) = {
+    Tensor(data.length, k).rand(-6 / sqrt(k), 6 / sqrt(k))
+  }
+
+  def normalize(data: Tensor[Float]) = {
+    for (i <- 1 to k)
+      data(i) / data(i).abs().sum()
+    data
   }
 
   import sk.implicits._
 
   def subset(data: DataFrame) = {
-    data.sample(false, (batch.toFloat / data.count().toFloat)).toDF()
+    data.sample(false, (batch / data.count()).toDouble).toDF()
   }
+
+  val seed = new Random(System.currentTimeMillis())
 
   def tuple(aux: Row, idx: Boolean) = {
 
-    val rd = seed.nextInt(train.s.length)
+    val rd = seed.nextInt(train.s.length) + 1
 
     if (idx) {
-      (rd + 1, aux.getInt(1), aux.getInt(2))
+      (rd, aux.getInt(1), aux.getInt(2))
     } else {
-      (aux.getInt(0), aux.getInt(1), rd + 1)
+      (aux.getInt(0), aux.getInt(1), rd)
     }
   }
 
   def generate(data: DataFrame) = {
 
-    var aux = Seq[(Int, Int, Int)]()
     val rnd = seed.nextBoolean()
+    var aux = Seq[(Int, Int, Int)]()
 
     for (j <- 1 to data.count().toInt) {
       val i = data.rdd.take(j).last
@@ -60,12 +69,18 @@ class TransE(train: Dataset, m: Float, k: Int, sk: SparkSession) extends Models 
   }
 
   def L1(vec: Row) = {
-    e.slice(vec.getInt(0)) + l.slice(vec.getInt(1)) - e.slice(vec.getInt(2))
+    (e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))).abs().sum().toFloat
+  }
+
+  def L2(vec: Row) = {
+    val p = Power(2, 1, 1)
+    (p.forward(e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2)))).sqrt().sum().toFloat
   }
 
   def run() = {
 
-    var opt = new AdaGrad(learningRate = rate)
+    var ept = new Adam(learningRate = rate)
+    var lpt = new Adam(learningRate = rate)
 
     for (i <- 1 to epochs) {
 
@@ -79,22 +94,19 @@ class TransE(train: Dataset, m: Float, k: Int, sk: SparkSession) extends Models 
         val ep = pos.rdd.take(j).last
         val en = neg.rdd.take(j).last
 
-        def delta() = {
-          L1(ep) - L1(en)
+        def delta(x: Tensor[Float]) = {
+          (myL(ep) - myL(en), x)
         }
 
-        if (m + sum(abs(L1(ep))).toScalar > sum(abs(L1(en))).toScalar) {
+        if (m + myL(ep) > myL(en)) {
 
-          opt.update(1, e, delta, e)
-          opt.update(1, l, delta, l)
-
-          err += m + sum(abs(L1(ep))).toScalar - sum(abs(L1(en))).toScalar
+          ept.optimize(delta, e)
+          lpt.optimize(delta, l)
+          err += m + myL(ep) - myL(en)
         }
-
       }
 
       printf("Epoch: %d: %f\n", i, err)
-
     }
   }
 
