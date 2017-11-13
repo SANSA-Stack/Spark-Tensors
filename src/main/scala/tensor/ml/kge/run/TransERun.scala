@@ -19,14 +19,9 @@ object TransERun {
 
   def main(args: Array[String]) = {
     
-    println("oi")
-    val train = new Dataset("train.txt", "\t", "false", sk)
-    
-    print(train.tb.show)
-    
+    val train = new Dataset("train.txt", "\t", "false", sk)    
     val model = new TransE(train, 1, 20, "L1", sk)
-    println("tchau")
- 
+    
     model.run()
     
     val test = new Dataset("test.txt", "\t", "false", sk)
