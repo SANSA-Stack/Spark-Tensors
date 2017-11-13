@@ -19,8 +19,8 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   val rate = 0.01f
 
   var e = initialize(train.s)
-  var l = normalize(initialize(train.p))
-  
+  var l = initialize(train.p)
+
   var ept = new Adam(learningRate = rate)
   var lpt = new Adam(learningRate = rate)
 
@@ -35,7 +35,7 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
 
   def normalize(data: Tensor[Float]) = {
     for (i <- 1 to k)
-      data(i) / data(i).abs().sum()
+      data(i) /= data(i).abs().sum()
     data
   }
 
@@ -93,22 +93,23 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
     for (i <- 1 to epochs) {
 
       e = normalize(e)
+      l = normalize(l)
       val pos = subset(train.df)
       val neg = generate(pos)
-      var err = 0f
 
       def delta(x: Tensor[Float]) = {
-        (myL(norm(pos)) - myL(norm(neg)), x)
+        (m + myL(norm(pos)) - myL(norm(neg)), x)
       }
-            
-      if(m * batch.toFloat + myL(norm(pos)) > myL(norm(neg))) {
+
+      if (m * batch + myL(norm(pos)) > myL(norm(neg))) {
 
         ept.optimize(delta, e)
         lpt.optimize(delta, l)
-        err = m * batch.toFloat + myL(norm(pos)) - myL(norm(neg))
+        val err = m * batch + myL(norm(pos)) - myL(norm(neg))
+        printf("Epoch: %d: %f\n", i, err)
       }
 
-      printf("Epoch: %d: %f\n", i, err)
+
     }
   }
 
