@@ -11,7 +11,6 @@ import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
 import tensor.ml.kge.dataset.Dataset
-import com.intel.analytics.bigdl.nn.L1Cost
 
 class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) extends Models {
 
@@ -21,10 +20,13 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
 
   var e = initialize(train.s)
   var l = normalize(initialize(train.p))
+  
+  var ept = new Adam(learningRate = rate)
+  var lpt = new Adam(learningRate = rate)
 
-  val norm = L match {
+  val myL = L match {
     case "L2" => L2 _
-    case _ => L1 _
+    case _    => L1 _
   }
 
   def initialize(data: Array[String]) = {
@@ -69,42 +71,41 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
     aux.toDF()
   }
 
-  def L1(vec: Row) = {
-    (e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))).abs().sum()
+  def norm(data: DataFrame) = {
+    data.collect().map(i =>
+      dist(i)).reduce((a, b) => a + b)
   }
 
-  def L2(vec: Row) = {
-    val p = Power(2, 1, 1)
-    Math.sqrt((p.forward(e(vec.getInt(0))) + p.forward(l(vec.getInt(1))) - p.forward(e(vec.getInt(2)))).sum().toDouble).toFloat
+  def dist(vec: Row) = {
+    e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))
+  }
+
+  def L1(vec: Tensor[Float]) = {
+    vec.abs().sum()
+  }
+
+  def L2(vec: Tensor[Float]) = {
+    vec.pow(2).sqrt().sum()
   }
 
   def run() = {
-
-    var ept = new Adam(learningRate = rate)
-    var lpt = new Adam(learningRate = rate)
 
     for (i <- 1 to epochs) {
 
       e = normalize(e)
       val pos = subset(train.df)
       val neg = generate(pos)
-      var err: Float = 0
+      var err = 0f
 
-      for (j <- 1 to pos.count().toInt) {
+      def delta(x: Tensor[Float]) = {
+        (myL(norm(pos)) - myL(norm(neg)), x)
+      }
+            
+      if(m * batch.toFloat + myL(norm(pos)) > myL(norm(neg))) {
 
-        val ep = pos.rdd.take(j).last
-        val en = neg.rdd.take(j).last
-
-        def delta(x: Tensor[Float]) = {
-          (norm(ep) - norm(en), x)
-        }
-
-        if (m + norm(ep) > norm(en)) {
-
-          ept.optimize(delta, e)
-          lpt.optimize(delta, l)
-          err += m + norm(ep) - norm(en)
-        }
+        ept.optimize(delta, e)
+        lpt.optimize(delta, l)
+        err = m * batch.toFloat + myL(norm(pos)) - myL(norm(neg))
       }
 
       printf("Epoch: %d: %f\n", i, err)
