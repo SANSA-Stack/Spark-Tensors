@@ -172,15 +172,14 @@ class Triples ( name: String,
 				var corruptedRow: Row = null
 
 				if (s != corrupted && Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject) {
-					corruptedRow = (corrupted, p, o).asInstanceOf[Row]
+					corruptedRow = Row.fromTuple(corrupted, p, o)
 				} else {
-					corruptedRow = (s, p, corrupted).asInstanceOf[Row]
+					corruptedRow = Row.fromTuple(s, p, corrupted)
 				}
 				corruptedRow
 			}
 		)
 
-		// maybe the schema needs to be re-added here
 		spark.sqlContext.createDataFrame(result, schema)
 	}
 	
