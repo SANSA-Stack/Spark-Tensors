@@ -42,7 +42,7 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   import sk.implicits._
 
   def subset(data: DataFrame) = {
-    data.sample(false, batch.toDouble / data.count().toDouble).toDF()
+    data.sample(false, 2*(batch.toDouble / data.count().toDouble)).limit(batch).toDF()
   }
 
   val seed = new Random(System.currentTimeMillis())
@@ -61,13 +61,10 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   def generate(data: DataFrame) = {
 
     val rnd = seed.nextBoolean()
-    var aux = Seq[(Int, Int, Int)]()
-
-    for (j <- 1 to data.count().toInt) {
-      val i = data.rdd.take(j).last
-      aux = tuple(i, rnd) +: aux
-    }
-
+    val aux = data.collect().map{ i =>
+      tuple(i, rnd)
+    }.toSeq
+    
     aux.toDF()
   }
 
