@@ -145,7 +145,46 @@ class Triples ( name: String,
 	  
 	  return result
 	}
-	
+
+	/**
+		* This is just a trial to fix the issue with fun2. Please delete if it doesn't work!
+		*/
+	def fun3(dfTriples : DataFrame = this.triples,
+					 probabilityToMutateSubjectWithRespectToObject : Double = 0.5) : DataFrame = {
+
+		println("---- Inside fun 3 ---")
+		println("dfTriples Len = ", dfTriples.count())
+
+		val entities: RDD[(Long, String)] = getAllDistinctEntities()
+			.zipWithIndex().map(stringLong => (stringLong._2, stringLong._1)).persist()
+
+		val entitiesCount: Long = entities.count()
+
+		val tmp: RDD[(Int, Row)] = dfTriples.map(trpl =>
+			(math.ceil(Random.nextDouble() * entitiesCount).toInt, trpl)
+		).rdd
+
+		val result: RDD[Row] = tmp.join(tmp).map(_._2).map[Row](leftRightRow => {
+				val leftRow: Row = leftRightRow._1
+				val corrupted = leftRow.getString(0)
+				val rightRow: Row = leftRightRow._2
+				val s = rightRow.getString(0)
+				val p = rightRow.getString(1)
+				val o = rightRow.getString(2)
+				var corruptedRow: Row = null
+
+				if (s != corrupted && Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject) {
+					corruptedRow = (corrupted, p, o).asInstanceOf[Row]
+				} else {
+					corruptedRow = (s, p, corrupted).asInstanceOf[Row]
+				}
+				corruptedRow
+			}
+		)
+
+		// maybe the schema needs to be re-added here
+		result.toDF()
+	}
 	
 	def corruptSubjectOrObject(dfTriples : DataFrame,
 	                           probabilityToMutateSubjectWithRespectToObject : Double = 0.5) : DataFrame = {
