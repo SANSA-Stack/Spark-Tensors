@@ -33,29 +33,27 @@ object TriplesTesting extends App {
 	println("<<< STARTING >>>")
 
 
-
-	
-	
 	var train : Triples = new Triples("train",spark,"./DataSets/FB15k/freebase_mtr100_mte100-train.txt")
 //	var test : Triples = new Triples("test",spark,"./DataSets/FB15k/freebase_mtr100_mte100-test.txt")
 //	var valid : Triples = new Triples("train",spark,"./DataSets/FB15k/freebase_mtr100_mte100-valid.txt")
 
-	var selected = train.triples.head(100)
+	var selected = train.triples.head(4)
 	
 	
 	val tmp = spark.sqlContext.createDataFrame(spark.sparkContext.parallelize(selected),train.schema)
-	
+
+
 	train.triples.show()
 	tmp.show()
-	val z = train.corruptSubjectOrObject2(tmp)
-	z.show()
-	println("train count= ",train.triples.count() )
-	println("z count= ",z.count() )
-	
-	
-	train.fun1(tmp).show()
-	
+	train.fun2(tmp).show()
+
 	println("ended !!!!!!!")
+	
+//	val z = train.corruptSubjectOrObject2(tmp)
+//	z.show()
+//	println("train count= ",train.triples.count() )
+//	println("z count= ",z.count() )
+	
 	
 //	train.triples.show()
 //	train.corruptSubjectOrObject(train.triples.sample(false, .05),.3).show()
@@ -78,7 +76,8 @@ object TriplesTesting extends App {
 //	println("num dist pred joint = "+(train.getAllDistinctPredicates() ++ test.getAllDistinctPredicates() ).distinct().count())
 	
 	
-	System.exit(0)
+//	System.exit(0)
+	
 //	
 //	println("++++++++++++++++++++++++++++++++++")
 //	val tt = new RDDTriples("train",spark,"./DataSets/FB15k/freebase_mtr100_mte100-train.txt")

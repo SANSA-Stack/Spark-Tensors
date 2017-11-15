@@ -109,6 +109,44 @@ class Triples ( name: String,
 	}
 	
 	
+	def fun2(dfTriples : DataFrame,
+	         probabilityToMutateSubjectWithRespectToObject : Double = 0.5) : DataFrame = {
+
+    println("---- Inside fun 2 ---")
+	  println("dfTriples Len = ",dfTriples.count() )
+	  
+	  val entities = getAllDistinctEntities().persist()
+    var rdd : RDD[String] = null
+	  
+	  val result = dfTriples.map{ 
+	    row =>
+	      val sub = row.getString(0)
+	      val pred = row.getString(1)
+	      val obj = row.getString(2)
+	      
+	      var corrupted : String = ""
+	      var corruptedRow : Row = null
+	      
+	      if( Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject )
+	      {
+	        rdd = spark.sparkContext.parallelize[String](List(sub))
+	        corrupted = entities.subtract(rdd).takeSample(false,1)(0)
+	        corruptedRow = (corrupted,pred,obj).asInstanceOf[Row]
+	      } else {
+	        rdd = spark.sparkContext.parallelize[String](List(obj))
+	        corrupted = entities.subtract(rdd).takeSample(false,1)(0)
+	        corruptedRow = (sub,pred,corrupted).asInstanceOf[Row]
+	      }
+	      	   
+	      corruptedRow
+	      
+	  }
+	  
+	  
+	  return result
+	}
+	
+	
 	def corruptSubjectOrObject(dfTriples : DataFrame,
 	                           probabilityToMutateSubjectWithRespectToObject : Double = 0.5) : DataFrame = {
 					
@@ -157,8 +195,8 @@ class Triples ( name: String,
 //	                  ($"Object" === row.Object) )
 //                 .distinct() )
 //               .sample(false, 0.5).first()
-//	          
-//	        } // else {
+	          
+//	        }  else {
 //	    }//.asInstanceOf[Dataset[Row]]
 
 //			val x = dfTriples.map{
