@@ -94,14 +94,18 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
       val pos = subset(train.df)
       val neg = generate(pos)
 
-      def delta(x: Tensor[Float]) = {
-        (m + myL(norm(pos)) - myL(norm(neg)), x)
+      def deltaE(x: Tensor[Float]) = {
+        (myL(norm(pos)), x)
       }
 
+      def deltaL(x: Tensor[Float]) = {
+        (- myL(norm(neg)), x)
+      }
+      
       if (m * batch + myL(norm(pos)) > myL(norm(neg))) {
 
-        ept.optimize(delta, e)
-        lpt.optimize(delta, l)
+        ept.optimize(deltaE, e)
+        lpt.optimize(deltaL, l)
         val err = m * batch + myL(norm(pos)) - myL(norm(neg))
         printf("Epoch: %d: %f\n", i, err)
       }
