@@ -17,7 +17,7 @@ import tensor.ml.kge.dataset.dataframe.Triples
 
 object TriplesTesting extends App {
   
-  def printType[T](x:T) :Unit = {println(x.getClass.toString())}
+  def printType[T](x:T) :Unit = { println(x.getClass.toString())}
   
 	Logger.getLogger("org").setLevel(Level.OFF)
 	Logger.getLogger("akka").setLevel(Level.OFF)
@@ -33,9 +33,9 @@ object TriplesTesting extends App {
 	println("<<< STARTING >>>")
 
 
-	var train : Triples = new Triples("train",spark,"./DataSets/FB15k/freebase_mtr100_mte100-train.txt")
-//	var test : Triples = new Triples("test",spark,"./DataSets/FB15k/freebase_mtr100_mte100-test.txt")
-//	var valid : Triples = new Triples("train",spark,"./DataSets/FB15k/freebase_mtr100_mte100-valid.txt")
+	var train : Triples = new Triples("train",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-train.txt")
+//	var test : Triples = new Triples("test",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-test.txt")
+//	var valid : Triples = new Triples("train",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-valid.txt")
 
 	var selected = train.triples.head(4)
 	
