@@ -129,12 +129,10 @@ class Triples ( name: String,
 	      
 	      if( Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject )
 	      {
-	        rdd = spark.sparkContext.parallelize[String](List(sub))
-	        corrupted = entities.subtract(rdd).takeSample(false,1)(0)
+	    	  corrupted = entities.filter(_!=sub).takeSample(false,1)(0)
 	        corruptedRow = (corrupted,pred,obj).asInstanceOf[Row]
 	      } else {
-	        rdd = spark.sparkContext.parallelize[String](List(obj))
-	        corrupted = entities.subtract(rdd).takeSample(false,1)(0)
+	    	  corrupted = entities.filter(_!=obj).takeSample(false,1)(0)
 	        corruptedRow = (sub,pred,corrupted).asInstanceOf[Row]
 	      }
 	      	   
