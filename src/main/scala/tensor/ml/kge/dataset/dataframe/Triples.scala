@@ -147,7 +147,7 @@ class Triples ( name: String,
 	/**
 		* This is just a trial to fix the issue with fun2. Please delete if it doesn't work!
 		*/
-	def fun3(dfTriples : DataFrame = this.triples,
+	def fun3(dfTriples : DataFrame,
 					 probabilityToMutateSubjectWithRespectToObject : Double = 0.5) : DataFrame = {
 
 		println("---- Inside fun 3 ---")
@@ -158,9 +158,9 @@ class Triples ( name: String,
 
 		val entitiesCount: Long = entities.count()
 
-		val tmp: RDD[(Int, Row)] = dfTriples.map(trpl =>
+		val tmp: RDD[(Int, Row)] = dfTriples.rdd.map(trpl =>
 			(math.ceil(Random.nextDouble() * entitiesCount).toInt, trpl)
-		).rdd
+		)
 
 		val result: RDD[Row] = tmp.join(tmp).map(_._2).map[Row](leftRightRow => {
 				val leftRow: Row = leftRightRow._1
@@ -181,7 +181,7 @@ class Triples ( name: String,
 		)
 
 		// maybe the schema needs to be re-added here
-		result.toDF()
+		spark.sqlContext.createDataFrame(result, schema)
 	}
 	
 	def corruptSubjectOrObject(dfTriples : DataFrame,
