@@ -42,30 +42,23 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   import sk.implicits._
 
   def subset(data: DataFrame) = {
-    data.sample(false, 2*(batch.toDouble / data.count().toDouble)).limit(batch).toDF()
+    data.sample(false, 2 * (batch.toDouble / data.count().toDouble)).limit(batch).toDF()
   }
 
   val seed = new Random(System.currentTimeMillis())
 
-  def tuple(aux: Row, idx: Boolean) = {
+  def tuple(aux: Row) = {
 
-    val rd = seed.nextInt(train.s.length) + 1
-
-    if (idx) {
-      (rd, aux.getInt(1), aux.getInt(2))
+    if (seed.nextBoolean()) {
+      (seed.nextInt(train.s.length) + 1, aux.getInt(1), aux.getInt(2))
     } else {
-      (aux.getInt(0), aux.getInt(1), rd)
+      (aux.getInt(0), aux.getInt(1), seed.nextInt(train.s.length) + 1)
     }
   }
 
   def generate(data: DataFrame) = {
-
-    val rnd = seed.nextBoolean()
-    val aux = data.collect().map{ i =>
-      tuple(i, rnd)
-    }.toSeq
-    
-    aux.toDF()
+    data.collect().map(i =>
+      tuple(i)).toSeq.toDF()
   }
 
   def norm(data: DataFrame) = {
@@ -95,13 +88,13 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
       val neg = generate(pos)
 
       def deltaE(x: Tensor[Float]) = {
-        (myL(norm(pos)), x)
+        (signum(+m + myL(norm(pos)) - myL(norm(neg))), x)
       }
 
       def deltaL(x: Tensor[Float]) = {
-        (- myL(norm(neg)), x)
+        (signum(-m - myL(norm(pos)) + myL(norm(neg))), x)
       }
-      
+
       if (m * batch + myL(norm(pos)) > myL(norm(neg))) {
 
         ept.optimize(deltaE, e)
@@ -109,7 +102,6 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
         val err = m * batch + myL(norm(pos)) - myL(norm(neg))
         printf("Epoch: %d: %f\n", i, err)
       }
-
 
     }
   }
