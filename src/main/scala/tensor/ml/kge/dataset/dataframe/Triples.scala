@@ -8,6 +8,7 @@ import scala.util.Random
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import com.twitter.chill._
+import scala.concurrent.forkjoin.ThreadLocalRandom
 
 case class Record(Subject: String, Predicate:String, Object:String)
 
@@ -115,31 +116,56 @@ class Triples ( name: String,
     println("---- Inside fun 2 ---")
 	  println("dfTriples Len = ",dfTriples.count() )
 	  
-	  val entities = getAllDistinctEntities().persist()
-    var rdd : RDD[String] = null
-	  
-	  val result = dfTriples.map{ 
-	    row =>
-	      val sub = row.getString(0)
-	      val pred = row.getString(1)
-	      val obj = row.getString(2)
-	      
-	      var corrupted : String = ""
-	      var corruptedRow : Row = null
-	      
-	      if( Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject )
-	      {
-	    	  corrupted = entities.filter(_!=sub).takeSample(false,1)(0)
-	        corruptedRow = (corrupted,pred,obj).asInstanceOf[Row]
-	      } else {
-	    	  corrupted = entities.filter(_!=obj).takeSample(false,1)(0)
-	        corruptedRow = (sub,pred,corrupted).asInstanceOf[Row]
-	      }
-	      	   
-	      corruptedRow
-	      
-	  }
-	  
+	  val entities = getAllDistinctEntities().zipWithIndex().persist()
+	  val NumEntities = entities.count()
+
+	  val whatIsSelectedForCorruptionRDD = dfTriples.map{
+      row =>
+        var indicator : String = null
+        var entity : String = null
+        
+        if( Random.nextDouble() < probabilityToMutateSubjectWithRespectToObject )
+        {
+          indicator = "S" // Subject is corrupted
+          entity = row.getString(0)          
+        } else {
+          indicator = "O" // Object is corrupted
+          entity = row.getString(2)
+        }
+        val t3 = new Tuple3(row.get(0).toString(), row.get(1).toString(), row.get(2).toString() )
+        (entity,(indicator,t3))
+    }.rdd
+
+    val willBeCorruptedRDD = whatIsSelectedForCorruptionRDD.join(entities).map{
+      case (entity: String, ((indicator: String, t3 @ (s:String,p:String,o:String)), index: Long) ) => 
+        
+        var corruptedIndex = ThreadLocalRandom.current().nextLong(NumEntities)
+        while (corruptedIndex == index){
+          corruptedIndex = ThreadLocalRandom.current().nextLong(NumEntities)
+        }
+        
+        (corruptedIndex,(indicator,t3))
+    }
+    
+    val result = willBeCorruptedRDD.join( entities.map{_.swap} /* reversing the order of entities (entity,index) to join */ )
+      .map{
+        case (corruptedIndex: Long, ((indicator: String, t3 @ (s:String, p:String, o:String)), corruptedEntity: String)) =>
+          
+          var sq = t3
+          if(indicator=="S"){
+            sq = (corruptedEntity,p,o)
+          } else {
+            sq = (s,p,corruptedEntity)
+          }
+            
+          sq
+    }.toDF("Subject","Predicate","Object")
+
+    
+    
+//    result.printSchema()
+//    result.show()
+
 	  
 	  return result
 	}

@@ -37,15 +37,23 @@ object TriplesTesting extends App {
 //	var test : Triples = new Triples("test",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-test.txt")
 //	var valid : Triples = new Triples("train",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-valid.txt")
 
-	var selected = train.triples.head(4)
+	var selected = train.triples.head(20)
 	
 	
 	val tmp = spark.sqlContext.createDataFrame(spark.sparkContext.parallelize(selected),train.schema)
 
 
 	train.triples.show()
-	tmp.show()
-	train.fun2(tmp).show()
+	
+	val corrupted = train.fun2(tmp)
+	
+	corrupted.persist().count()
+	
+	println("\nSelected to be corrupted:")
+	tmp.sort("Predicate").show()
+	
+	println("Corrupted:")
+	corrupted.sort("Predicate").show()
 
 	println("ended !!!!!!!")
 	
