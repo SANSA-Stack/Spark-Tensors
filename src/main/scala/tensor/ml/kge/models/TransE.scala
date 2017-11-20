@@ -19,10 +19,9 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
   val rate = 0.01f
 
   var e = initialize(train.s)
-  var l = initialize(train.p)
+  var r = normalize(initialize(train.p))
 
-  var ept = new Adam(learningRate = rate)
-  var lpt = new Adam(learningRate = rate)
+  var opt = new Adam(learningRate = rate)
 
   val myL = L match {
     case "L2" => L2 _
@@ -61,13 +60,10 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
       tuple(i)).toSeq.toDF()
   }
 
-  def norm(data: DataFrame) = {
-    data.collect().map(i =>
-      dist(i)).reduce((a, b) => a + b)
-  }
-
-  def dist(vec: Row) = {
-    e(vec.getInt(0)) + l(vec.getInt(1)) - e(vec.getInt(2))
+  def dist(data: DataFrame) = {
+    data.collect().map { i =>
+      e(i.getInt(0)) + r(i.getInt(1)) - e(i.getInt(2))
+    }.reduce((a, b) => a + b)
   }
 
   def L1(vec: Tensor[Float]) = {
@@ -83,23 +79,17 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
     for (i <- 1 to epochs) {
 
       e = normalize(e)
-      l = normalize(l)
       val pos = subset(train.df)
       val neg = generate(pos)
 
-      def deltaE(x: Tensor[Float]) = {
-        (signum(+m + myL(norm(pos)) - myL(norm(neg))), x)
+      def delta(x: Tensor[Float]) = {
+        (signum(m + myL(dist(pos)) - myL(dist(neg))), x)
       }
+      
+      if (m * batch + myL(dist(pos)) > myL(dist(neg))) {
 
-      def deltaL(x: Tensor[Float]) = {
-        (signum(-m - myL(norm(pos)) + myL(norm(neg))), x)
-      }
-
-      if (m * batch + myL(norm(pos)) > myL(norm(neg))) {
-
-        ept.optimize(deltaE, e)
-        lpt.optimize(deltaL, l)
-        val err = m * batch + myL(norm(pos)) - myL(norm(neg))
+        opt.optimize(delta, e)
+        val err = m + myL(dist(pos)) - myL(dist(neg))
         printf("Epoch: %d: %f\n", i, err)
       }
 
