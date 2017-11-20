@@ -59,6 +59,10 @@ class TransE(train: Dataset, m: Float, k: Int, L: String, sk: SparkSession) exte
     data.collect().map(i =>
       tuple(i)).toSeq.toDF()
   }
+  
+  def dist(data: Row) = {
+    e(data.getInt(0)) + r(data.getInt(1)) - e(data.getInt(2))
+  }
 
   def dist(data: DataFrame) = {
     data.collect().map { i =>
