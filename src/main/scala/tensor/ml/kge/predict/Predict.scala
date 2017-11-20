@@ -2,7 +2,9 @@ package tensor.ml.kge.predict
 
 import org.apache.spark.sql._
 
-abstract class Predict(test: DataFrame) {
+import tensor.ml.kge.dataset.Dataset
+
+abstract class Predict(test: Dataset) {
 
   var left: Seq[Float] = List()
   var right: Seq[Float] = List()
@@ -13,15 +15,15 @@ abstract class Predict(test: DataFrame) {
 
   def ranking() = {
 
-    test.collect().map { row =>
-      left = left :+ leftRank(row)
-      right = right :+ rightRank(row)
+    test.df.collect().map { row =>
+      left = leftRank(row) +: left
+      right = rightRank(row) +: right
     }
 
     (left, right)
   }
 
-  def mean() {
+  def meanRanking() {
     (left.sum / left.length,
       right.sum / right.length)
   }
