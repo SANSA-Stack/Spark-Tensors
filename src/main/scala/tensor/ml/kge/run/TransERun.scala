@@ -25,7 +25,7 @@ object TransERun {
     model.run()
     
     val test = new Dataset("test.txt", "\t", "false", sk)
-    val predict = new Evaluate(model, test.df, sk)
+    val predict = new Evaluate(model, test, sk)
     
     println(predict)
   
