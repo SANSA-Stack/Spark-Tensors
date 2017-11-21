@@ -6,8 +6,6 @@ import org.apache.log4j.Logger
 import org.apache.log4j.Level
 
 import tensor.ml.kge.dataset.Dataset
-import tensor.ml.kge.models.TransE
-import tensor.ml.kge.predict.Evaluate
 
 object TransERun {
 
@@ -20,12 +18,12 @@ object TransERun {
   def main(args: Array[String]) = {
     
     val train = new Dataset("train.txt", "\t", "false", sk)    
-    val model = new TransE(train, 1, 20, "L1", sk)
+    val model = new tensor.ml.kge.models.TransE(train, 100, 20, 1, "L1", sk)
     
     model.run()
     
     val test = new Dataset("test.txt", "\t", "false", sk)
-    val predict = new Evaluate(model, test, sk)
+    val predict = new tensor.ml.kge.predict.TransE(model, test, sk)
     
     println(predict)
   

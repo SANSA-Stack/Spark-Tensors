@@ -6,8 +6,8 @@ import tensor.ml.kge.dataset.Dataset
 
 abstract class Predict(test: Dataset) {
 
-  var left: Seq[Float] = List()
-  var right: Seq[Float] = List()
+  var left = Seq[Float]()
+  var right = Seq[Float]()
 
   def leftRank(row: Row): Float
 

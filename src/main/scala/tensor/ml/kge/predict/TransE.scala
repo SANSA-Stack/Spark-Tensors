@@ -5,9 +5,7 @@ import org.apache.spark.sql._
 import tensor.ml.kge.models._
 import tensor.ml.kge.dataset.Dataset
 
-class Evaluate(model: TransE, test: Dataset, sk: SparkSession) extends Predict(test: Dataset) {
-
-  import sk.implicits._
+class TransE(model: tensor.ml.kge.models.TransE, test: Dataset, sk: SparkSession) extends Predict(test: Dataset) {
 
   def head(i: Int, r: Row) = {
     Row(i, r.getInt(1), r.getInt(2))
