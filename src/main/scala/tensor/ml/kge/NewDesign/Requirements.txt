@@ -1,0 +1,51 @@
+abstract class Triples 
+	- loading datasets
+	- querying all entities
+	- querying all relationships
+
+	
+	
+Abstract class AlgorithmicRequirements => [different classes will implement this -> simple convertor, customized convertor,
+
+There are two possiblities which could be implemented:
+(a) 1 file = test + training => we have to separate it ourselves e.g. cross validation (Hold out, F-fold cross validation, K-fold, random subsampling, bootstrapping)
+(b) 2 files => test & training are given as two separate files. 
+   
+	- convertor: triples to numerical values
+		- numerical Spark-DataFrame with columns of (Long, Long, Long)
+		- convertors for case (A) should consider the internal structure of the original data sets in files
+		
+	- inverse-convertor: converting back from numerical presentation
+	- querying what is what after transformation to numeric values
+	- negative sampler
+	- comparing similarities between entities/relationships
+	- generate training and test datasets
+	
+
+class PerformanceTesting
+	- measures 
+		- top ranking (@ X)
+		- precision and recall
+		- F-score
+		- AUC
+		
+abstract class Algorithm
+	- implementation
+	- logging
+	- meta-parameter manipulation
+	- timing 
+	
+	
+
+	
+		
+	
+================== Other option ========================= 
+=========================================================
+trait Triples
+trait AlgorithmicRequirements
+
+class TriplesCaseB extend Triples
+class TriplesCaseA extend Triples & AlgorithmicRquriementes
+
+TripleCaseA extends TriplesCaseB
