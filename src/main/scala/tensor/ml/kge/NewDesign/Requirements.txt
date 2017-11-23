@@ -35,6 +35,9 @@ abstract class Algorithm
 	- meta-parameter manipulation
 	- timing 
 	
+abstract class Prediction
+	- 
+	
 	
 
 	
