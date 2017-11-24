@@ -3,12 +3,13 @@ abstract class Triples
 	- querying all entities
 	- querying all relationships
 
-	
-	
-Abstract class AlgorithmicRequirements => [different classes will implement this -> simple convertor, customized convertor,
+abstract class CrossValidator	
+(a) 1 file = test + training => we have to separate it ourselves e.g. cross validation (Hold out, F-fold cross validation, K-fold, random subsampling, bootstrapping)
+	- generate training and test datasets
+		
+Abstract class Convertor => [different classes will implement this -> simple convertor, customized convertor,
 
 There are two possiblities which could be implemented:
-(a) 1 file = test + training => we have to separate it ourselves e.g. cross validation (Hold out, F-fold cross validation, K-fold, random subsampling, bootstrapping)
 (b) 2 files => test & training are given as two separate files. 
    
 	- convertor: triples to numerical values
@@ -19,8 +20,9 @@ There are two possiblities which could be implemented:
 	- querying what is what after transformation to numeric values
 	- negative sampler
 	- comparing similarities between entities/relationships
-	- generate training and test datasets
-	
+
+
+
 
 class PerformanceTesting
 	- measures 
@@ -28,7 +30,8 @@ class PerformanceTesting
 		- precision and recall
 		- F-score
 		- AUC
-		
+	
+class Parameters [keeps track of each algorithm paprameters] ???		
 abstract class Algorithm
 	- implementation
 	- logging
@@ -40,8 +43,13 @@ abstract class Prediction
 	
 	
 
-	
-		
+PipeLine:
+
+load data sets -> 
+1.* raw strings -> numerical convertor -> cross validation -> algorithm
+2. raw strings + cross validated -> numerical convertor -> algorithm	
+3.* already numerical datasets -> cross validation -> algorithm
+4. already numerical datasets + cross validated -> algorithm 		
 	
 ================== Other option ========================= 
 =========================================================
