@@ -3,33 +3,34 @@ package tensor.ml.kge.dataset.dataframe
 import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.sql._
-import org.apache.spark.sql.types._
+
 import scala.util.Random
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import com.twitter.chill._
 import scala.concurrent.forkjoin.ThreadLocalRandom
+import org.apache.spark.sql.types._
 
 case class Record(Subject: String, Predicate:String, Object:String)
 
-class Triples ( name: String,
-		spark : SparkSession, 
-		filePathTriples : String) {
+class Triples ( name: String, 
+		filePathTriples : String,
+		spark : SparkSession) {
 
 
 	import spark.implicits._  // to be able to work with """spark.sql("blah blah").as[String].rdd"""
 
 	val schema = StructType(Array(
-			StructField("Subject", StringType, true),
-			StructField("Predicate", StringType, true),
-			StructField("Object", StringType, true) ))
+    StructField("Subject", StringType, true),
+    StructField("Predicate", StringType, true),
+    StructField("Object", StringType, true)))
 			
 	implicit 	val encoder = RowEncoder(schema)
 
 //  case class Record(Subject: String, Predicate:String, Object:String)
 
 	var triples : DataFrame = readFromFile()
-
+	
 	val nameViewTriples = name + "OriginalTriples"
 
 	triples.createOrReplaceTempView(nameViewTriples)

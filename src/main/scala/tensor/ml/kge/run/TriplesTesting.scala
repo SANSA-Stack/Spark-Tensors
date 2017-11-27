@@ -33,7 +33,7 @@ object TriplesTesting extends App {
 	println("<<< STARTING >>>")
 
 
-	var train : Triples = new Triples("train",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-train.txt")
+	var train : Triples = new Triples("train","/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-train.txt", spark)
 //	var test : Triples = new Triples("test",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-test.txt")
 //	var valid : Triples = new Triples("train",spark,"/home/hamed/PROGRAMS/git/Spark-Tensors/src/main/scala/tensor/ml/kge/dataset/DataSets/FB15k/freebase_mtr100_mte100-valid.txt")
 
