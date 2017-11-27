@@ -3,9 +3,8 @@ package tensor.ml.kge.predict
 import org.apache.spark.sql._
 
 import tensor.ml.kge.models._
-import tensor.ml.kge.dataset.Dataset
 
-class TransE(model: tensor.ml.kge.models.TransE, test: Dataset, sk: SparkSession) extends Predict(test: Dataset) {
+class TransE(model: tensor.ml.kge.models.TransE, test: DataFrame, sk: SparkSession) extends Predict(test: DataFrame) {
 
   def head(i: Int, r: Row) = {
     Row(i, r.getInt(1), r.getInt(2))
@@ -21,7 +20,7 @@ class TransE(model: tensor.ml.kge.models.TransE, test: Dataset, sk: SparkSession
     val y = model.myL(model.dist(row))
 
     x = y +: x
-    for (i <- 1 until test.s.length) {
+    for (i <- 1 until model.entities.length) {
       x = model.myL(model.dist(head(i, row))) +: x
     }
 
@@ -34,7 +33,7 @@ class TransE(model: tensor.ml.kge.models.TransE, test: Dataset, sk: SparkSession
     val y = model.myL(model.dist(row))
 
     x = y +: x
-    for (i <- 1 until test.s.length) {
+    for (i <- 1 until model.entities.length) {
       x = model.myL(model.dist(tail(i, row))) +: x
     }
 

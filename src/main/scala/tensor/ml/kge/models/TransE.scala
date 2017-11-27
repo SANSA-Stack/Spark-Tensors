@@ -8,10 +8,8 @@ import com.intel.analytics.bigdl.optim.Adam
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
-import tensor.ml.kge.dataset.Dataset
-
-class TransE(train: Dataset, batch: Int, k: Int, margin: Float, L: String, sk: SparkSession)
-    extends Models(train: Dataset, batch: Int, k: Int, sk: SparkSession) {
+class TransE(train: DataFrame, batch: Int, k: Int, margin: Float, L: String, sk: SparkSession)
+    extends Models(train: DataFrame, batch: Int, k: Int, sk: SparkSession) {
 
   val epochs = 1000
   val rate = 0.01f
@@ -36,7 +34,7 @@ class TransE(train: Dataset, batch: Int, k: Int, margin: Float, L: String, sk: S
     for (i <- 1 to epochs) {
 
       e = normalize(e)
-      val pos = subset(train.df)
+      val pos = subset(train)
       val neg = generate(pos)
 
       def delta(x: Tensor[Float]) = {

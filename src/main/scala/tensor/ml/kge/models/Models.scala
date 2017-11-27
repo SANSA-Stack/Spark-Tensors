@@ -9,14 +9,17 @@ import com.intel.analytics.bigdl.nn.Power
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
-import tensor.ml.kge.dataset.Dataset
+abstract class Models(train: DataFrame, batch: Int, k: Int, sk: SparkSession) {
 
-abstract class Models(train: Dataset, batch: Int, k: Int, sk: SparkSession) {
+  val entities = (train.select("_1").collect.map(_.getInt(0)) ++
+      train.select("_3").collect.map(_.getInt(0))).distinct
 
-  var e = initialize(train.s)
-  var r = normalize(initialize(train.p))
+  val relations = (train.select("_2").collect.map(_.getInt(0))).distinct
+    
+  var e = initialize(entities)
+  var r = normalize(initialize(relations))
 
-  def initialize(data: Array[String]) = {
+  def initialize(data: Array[Int]) = {
     Tensor(data.length, k).rand(-6 / sqrt(k), 6 / sqrt(k))
   }
 
@@ -31,9 +34,9 @@ abstract class Models(train: Dataset, batch: Int, k: Int, sk: SparkSession) {
   def tuple(aux: Row) = {
 
     if (seed.nextBoolean()) {
-      (seed.nextInt(train.s.length) + 1, aux.getInt(1), aux.getInt(2))
+      (seed.nextInt(entities.length) + 1, aux.getInt(1), aux.getInt(2))
     } else {
-      (aux.getInt(0), aux.getInt(1), seed.nextInt(train.s.length) + 1)
+      (aux.getInt(0), aux.getInt(1), seed.nextInt(entities.length) + 1)
     }
   }
 

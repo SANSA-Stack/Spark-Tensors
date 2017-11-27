@@ -6,10 +6,8 @@ import com.intel.analytics.bigdl.optim.Adam
 import com.intel.analytics.bigdl.tensor.Tensor
 import com.intel.analytics.bigdl.tensor.TensorNumericMath.TensorNumeric.NumericFloat
 
-import tensor.ml.kge.dataset.Dataset
-
-class DistMult(train: Dataset, batch: Int, k: Int, sk: SparkSession)
-    extends Models(train: Dataset, batch: Int, k: Int, sk: SparkSession) {
+class DistMult(train: DataFrame, batch: Int, k: Int, sk: SparkSession)
+    extends Models(train: DataFrame, batch: Int, k: Int, sk: SparkSession) {
 
   val epochs = 100
   val rate = 0.01f
@@ -29,7 +27,7 @@ class DistMult(train: Dataset, batch: Int, k: Int, sk: SparkSession)
     for (i <- 1 to epochs) {
 
       e = normalize(e)
-      val pos = subset(train.df)
+      val pos = subset(train)
       val neg = generate(pos)
 
       def delta(x: Tensor[Float]) = {

@@ -2,9 +2,7 @@ package tensor.ml.kge.predict
 
 import org.apache.spark.sql._
 
-import tensor.ml.kge.dataset.Dataset
-
-abstract class Predict(test: Dataset) {
+abstract class Predict(test: DataFrame) {
 
   var left = Seq[Float]()
   var right = Seq[Float]()
@@ -15,7 +13,7 @@ abstract class Predict(test: Dataset) {
 
   def ranking() = {
 
-    test.df.collect().map { row =>
+    test.collect().map { row =>
       left = leftRank(row) +: left
       right = rightRank(row) +: right
     }
