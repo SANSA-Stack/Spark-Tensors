@@ -4,7 +4,7 @@ import org.apache.spark.sql._
 
 case class rateException(info: String) extends Exception
 
-class Holdout(data: DataFrame, rate: Float) extends CrossValidation {
+class Holdout(data: DataFrame, rate: Float) extends CrossValidation[DataFrame] {
 
   if (rate < 0 || rate >= 1)
     throw new rateException("Rate value should be higher than 0 and lower than 1")

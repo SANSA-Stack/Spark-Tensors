@@ -2,8 +2,8 @@ package tensor.ml.kge.crossValidation
 
 import org.apache.spark.sql._
 
-trait CrossValidation {
+trait CrossValidation[T] {
 
-  def crossValidation()
+  def crossValidation: (T, T)
 
 }

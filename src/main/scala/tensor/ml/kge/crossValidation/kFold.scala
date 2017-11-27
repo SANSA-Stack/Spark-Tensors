@@ -5,7 +5,7 @@ import org.apache.spark.sql.types.IntegerType
 
 case class kException(info: String) extends Exception
 
-class kFold(data: DataFrame, k: Int, sk: SparkSession) extends CrossValidation {
+class kFold(data: DataFrame, k: Int, sk: SparkSession) extends CrossValidation[Seq[DataFrame]] {
 
   import sk.implicits._
 

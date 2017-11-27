@@ -2,7 +2,7 @@ package tensor.ml.kge.crossValidation
 
 import org.apache.spark.sql._
 
-class Bootstrapping(data: DataFrame) extends CrossValidation {
+class Bootstrapping(data: DataFrame) extends CrossValidation[DataFrame] {
 
   def crossValidation() = {
     val train = data.sample(true, 1).toDF()
